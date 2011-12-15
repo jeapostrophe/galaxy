@@ -1,0 +1,8 @@
+* This is the next generation Racket package system to succeed Planet
+** I refer to it as Galaxy, but it will probably be just called Planet 2.0
+* Philosophy
+* Pieces
+** Package format
+** Package database
+** Package installations
+** Package index service
