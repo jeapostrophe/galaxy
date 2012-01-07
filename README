@@ -1,8 +1,213 @@
 * This is the next generation Racket package system to succeed Planet
 ** I refer to it as Galaxy, but it will probably be just called Planet 2.0
 * Philosophy
+
+The philosophy of Galaxy is to have many small pieces that do almost
+nothing that can be built on to do more. This is to encourage swapping
+out pieces and making it easy to do, as well as keeping the
+implementation and its use simple.
+
 * Pieces
-** Package format
-** Package database
-** Package installations
-** Package index service
+** What is a package?
+   A set of collections (although a special case is to install one
+   that is just one collector)
+
+   Any directory or thing that can represent a directory (like a URL
+   directory or an archive) is a package.
+** What do we know about a package, before installation?
+   Name: A string identifying the package
+   Checksum: A SHA1 hash of the entire contents (excluding metadata)
+   Dependencies: A list of package strings it depends on
+   Metadata: An association list of information
+   Manifest: A list of files in it (possibly computed)
+** What about a version number?
+   Packages have no version, besides the checksum. This means that you
+   can determine if an installed package is out-of-date, but nothing
+   else.
+
+   This means that backward incompatible changes should not occur,
+   although this will not be checked.
+
+   Incompatible changes should result in new packages... i.e. libgtk1
+   to libgtk2.
+
+** Where are packages installed?
+   In the addon-dir or the system-addon-dir
+** What do we know about a package, after installation?
+   Name, Checksum, Dependencies, Metadata
+
+   Source: Where the original package contents originated (for update
+   purposes)
+
+   Installed as dependency flag: Records whether the package was
+   installed because it was a dependency or whether the user really
+   wanted it.
+** Conflicts between packages
+   A failure is detected using the manifest and installation fails
+
+   Installation can be forced
+** Where do I get packages?
+   Arbitrary URLs --- to avoid unnecessary work if the URL refers to a
+   file, then it is assumed there is a $.CHECKSUM $.METADATA.rktd file
+   with metadata, including dependencies, the manifest will be
+   computed when it is downloaded. If it is a directory, then
+   $/CHECKSUM and $/METADATA.rktd is assumed to exist, as well as
+   $/MANIFEST listing the files that should be downloaded.
+
+   Git URLs --- assumed to refer to a branch + path in the repo where
+   the checksum is the commit and otherwise treated as a directory
+   URL, modulo not needing a MANIFEST. 
+
+   A package indexing service --- An HTTP RESTful protocol is used to
+   determine all information.
+** How do I know about a PIS?
+   There is a default one run by PLT. It will have a very simple
+   protocol that anyone could implement easily, and we will provide a
+   basic implementation that someone could deploy locally.
+
+   Each user will have a sorted list of PISs
+** How dependencies are dealt with
+   A package lists its dependencies by name. If they are not
+   installed, there are three options
+
+   'fail - The installation fails
+
+   'force - The installation is forced
+
+   'search - The dependencies are search for on the PIS
+
+   The default will be 'search for installations from the PIS and
+   'fail for all other installations.
+** Where do I find out about packages?
+   The official PIS will additionally present an human interface on
+   the package database.
+
+   The PIS will reserve all packages matching #rx"^racket.*"
+   and #rx"^plt.*" for use by PLT.
+
+   It will define a special set of metadata and rules about them.
+
+   Modifiable by the author only:
+
+   'description - A string description of the package
+
+   'contact - A string for the email address (or other contact details
+   of the author)
+
+   'home-url - Website URL
+
+   'problem-url - Problem report URL
+
+   'doc-url - Documentation URL
+
+   'license - A string specifying the license
+
+   'obsoleted-by - A string specifying a new package providing
+   similar or better functionality. If core Racket provides the
+   functionality, then the fake package "racket-core-version" should
+   be used.
+
+   'core-dependency - Two maybe-strings specifying the range of core Racket
+   versions the packages works with. The value #f specifies an
+   unbounded range on that side.
+
+   Modifiable by PLT only:
+
+   'trusted - A boolean signifying if the package has been vetted by
+   PLT
+
+   Updated by the public:
+
+   'likes - A number that can go up only
+
+   'tags - A list of strings that can be added to by anyone and
+   removed by only the author and PLT
+
+   Updated by the PIS only:
+
+   'last-update - The last time the package was modified
+
+   'live - True if the package source URL is accessible
+
+** Security & verification of package contents
+   Since the PIS does not store the contents of packages, the client
+   will verify the checksum given by the PIS versus the checksum of
+   the data provided by the package content source. If there is a
+   mismatch, an attack is assumed to be underway.
+
+   All data from the PIS will be signed with the private part of a
+   key-pair.
+
+   The public key of the official PIS will come with every Racket
+   install.
+** Updating packages (client)
+   When updating a package, the original source is consulted for a new
+   checksum that is compared with the checksum of the package that is
+   installed. If they are different, an update is available.
+
+   Updates may come with new metadata (such as dependencies) and thus
+   could lead to further installations. In such a case, the normal
+   installation rules apply.
+
+   The client will have access to
+
+   update       -- Only the named packages are checked
+   update+deps  -- The named packages are checked
+   update-all   -- All installed packages are checked
+
+** Other package management
+   remove       -- Remove a package
+   
+   autoremove   -- Remove packages that were installed as dependencies
+   for removed packages
+** Updating packages (developer)
+   For a developer, updating a package entails uploading checksum,
+   content, and metadata files to a public URL.
+
+   If the developer is using git, then all pushes will automatically
+   result in a new package checksum, contents, etc.
+
+   The official PIS will periodically poll all packages for updates,
+   perhaps every day, but an author can manually request a poll at any
+   time. The PIS will not poll on behalf of a client, ever.
+
+   Thus, a developer using git can inform the PIS about a package a
+   single time and never go back to the site and users will always get
+   the most recent versions.
+** Integration with DrDr
+   Packages that the official PIS marks as trusted will be
+   automatically checked by DrDr. If the author is not responsive to
+   conditions found by the DrDr, then trusted status will be revoked.
+** Planet compatibility server
+   In the beginning, we will run a Planet compatibility server that
+   presents all existing Planet packages as if they are Galaxy
+   packages.
+
+   user/package/major.plt/minor will be presented as
+   user-package-major and will provide the collection
+   user/package-major.
+
+   So, jaymccarthy/opencl.plt/1/2 will be jaymccarthy-opencl-1 and
+   will provide jaymccarthy/opencl-1
+
+   The compatibility server will download the package, automatically
+   rewrite obvious planet references to the Galaxy syntax and populate
+   the dependencies with the obvious references.
+
+   The automatic translation is likely to break on many packages that
+   do exotic or reflective things.
+** Integration with distribution
+   The core distribution will be very small but will ship with a set
+   of default packages that will automatically be installed (or
+   pre-installed in the image.) This set will be decided by PLT and
+   will be be reflected in an OPIS flag.
+** Custom distribution creation
+   We will offer a site where users can assemble their own
+   distributions by checking off boxes for packages. This will produce
+   a URL for a download that includes the core system and a set of
+   packages. We expect people will use this for classes. Any package
+   can be selected in this process.
+** Integration with DrRacket
+   We'll make a GUI for package management. When DrRacket starts it
+   will have a button that is "highlighted" in some way until the user
+   clicks on it at least once which introduces the package system.
