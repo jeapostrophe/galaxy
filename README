@@ -152,14 +152,19 @@ implementation and its use simple.
    The client will have access to
 
    update       -- Only the named packages are checked
-   update+deps  -- The named packages are checked
+   update+deps  -- The named packages and deps are checked
    update-all   -- All installed packages are checked
 
 ** Other package management
-   remove       -- Remove a package
+   remove               -- Remove a package
    
-   autoremove   -- Remove packages that were installed as dependencies
+   autoremove           -- Remove packages that were installed as dependencies
    for removed packages
+
+   export               -- Extract an archive of a package
+
+   export-distribution  -- Extract all packages and core into a saved
+   version of the installation
 ** Updating packages (developer)
    For a developer, updating a package entails uploading checksum,
    content, and metadata files to a public URL.
