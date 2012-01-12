@@ -165,6 +165,10 @@ implementation and its use simple.
 
    export-distribution  -- Extract all packages and core into a saved
    version of the installation
+
+   show                 -- Show installed packages
+
+   create               -- Bundle a directory
 ** Updating packages (developer)
    For a developer, updating a package entails uploading checksum,
    content, and metadata files to a public URL.
@@ -183,6 +187,9 @@ implementation and its use simple.
    Packages that the official PIS marks as trusted will be
    automatically checked by DrDr. If the author is not responsive to
    conditions found by the DrDr, then trusted status will be revoked.
+** Other trusted notes
+   Trusted code must be documented, tested, and be able to all be
+   installed simultaneously.
 ** Planet compatibility server
    In the beginning, we will run a Planet compatibility server that
    presents all existing Planet packages as if they are Galaxy
@@ -216,3 +223,6 @@ implementation and its use simple.
    We'll make a GUI for package management. When DrRacket starts it
    will have a button that is "highlighted" in some way until the user
    clicks on it at least once which introduces the package system.
+** Other things
+   I'd like to extend the props so there is meta/props.d where
+   packages can install custom props for DrDr
