@@ -28,7 +28,11 @@
    ;; XXX optional ()s for auto string-append/format
    (pattern (~seq (~datum $) command-line:expr
                   (~optional (~seq (~datum =exit>) exit-cond:expr)
-                             #:defaults ([exit-cond #'0])))
+                             #:defaults ([exit-cond #'0]))
+                  (~optional (~seq (~datum =stdout>) output-str:expr)
+                             #:defaults ([output-str #'#f]))
+                  (~optional (~seq (~datum <input=) input-str:expr)
+                             #:defaults ([input-str #'#f])))
             #:attr
             code
             (quasisyntax/loc
@@ -38,6 +42,8 @@
                 cmd
                 (printf "$ ~a\n" cmd)
                 (define cmd-status (system/exit-code cmd))
+                ;; XXX use input-str
+                ;; XXX use output-str
                 #,(syntax/loc #'command-line
                               (check-equal? cmd-status exit-cond "exit code"))))))
    (pattern (~and (~not (~datum $))
@@ -112,18 +118,19 @@
     $ "raco pkg export -h"
     $ "raco pkg show -h"
     $ "raco pkg create -h")
+
+   (define-syntax-rule (shelly-install message pkg more ...)
+     (with-fake-root
+      (shelly-case
+       (format "Test installation of ~a" message)
+       $ "racket -e '(require galaxy-test1)'" =exit> 1
+       $ (format "raco pkg install ~a" pkg)
+       $ "racket -e '(require galaxy-test1)'"
+       more ...
+       $ "raco pkg remove galaxy-test1"
+       $ "racket -e '(require galaxy-test1)'" =exit> 1)))
    (shelly-case
     "raco pkg install tests"
-    (define-syntax-rule (shelly-install message pkg more ...)
-      (with-fake-root
-       (shelly-case
-        (format "Test installation of ~a" message)
-        $ "racket -e '(require galaxy-test1)'" =exit> 1
-        $ (format "raco pkg install ~a" pkg)
-        $ "racket -e '(require galaxy-test1)'"
-        more ...
-        $ "raco pkg remove galaxy-test1"
-        $ "racket -e '(require galaxy-test1)'" =exit> 1)))
     (shelly-install "local package (tgz)" "test-pkgs/galaxy-test1.tgz")
     (shelly-install "local package (zip)" "test-pkgs/galaxy-test1.zip")
     (shelly-install "local package (plt)" "test-pkgs/galaxy-test1.plt")
@@ -149,7 +156,11 @@
       (finally
        $ "rm -r test-pkgs/galaxy-test1-linking")))
 
-    (shelly-install "remote/name package" "galaxy-test1")
+    ;; XXX list of package indexes (not just default)
+    (shelly-install "remote/name package" "galaxy-test1"))
+
+   (shelly-case
+    "conflicts"
     (shelly-install "double install fails" "test-pkgs/galaxy-test1.zip"
                     $ "raco pkg install galaxy-test1.zip" =exit> 1)
     (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
@@ -157,8 +168,10 @@
     (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
                     $ "racket -e '(require galaxy-test1/conflict)" =exit> 42
                     $ "raco pkg install --force galaxy-test1-conflict.zip" =exit> 0
-                    $ "racket -e '(require galaxy-test1/conflict)" =exit> 43)
+                    $ "racket -e '(require galaxy-test1/conflict)" =exit> 43))
 
+   (shelly-case
+    "checksums"
     (with-fake-root
      (shelly-case
       "checksums are checked if present (local)"
@@ -184,7 +197,187 @@
     (shelly-install "but, bad checksums can be ignored (remote)"
                     "--ignore-checksums http://localhost/galaxy-test1-bad-checksum.zip")
     (shelly-install "but, checksums can be missing if ignored (remote)"
-                    "--ignore-checksums http://localhost/galaxy-test1-no-checksum.zip")
+                    "--ignore-checksums http://localhost/galaxy-test1-no-checksum.zip"))
 
-    ;; XXX dependencies (different behaviors)
-    ))))
+   (shelly-case
+    "dependencies"
+
+    (with-fake-root
+     (shelly-case
+      "local - fail (default)"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install test-pkgs/galaxy-test2.zip" =exit> 1
+      $ "raco pkg install test-pkgs/galaxy-test1.zip" =exit> 0
+      $ "raco pkg install test-pkgs/galaxy-test2.zip" =exit> 0
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 1
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - fail"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps fail test-pkgs/galaxy-test2.zip" =exit> 1
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - force"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps force test-pkgs/galaxy-test2.zip"
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 1
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - search-ask [y]"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps search-ask test-pkgs/galaxy-test2.zip" =exit> 0 <input= "y\n"
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - search-ask []"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps search-ask test-pkgs/galaxy-test2.zip" =exit> 0 <input= "\n"
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - search-ask [n]"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps search-ask test-pkgs/galaxy-test2.zip" =exit> 1 <input= "n\n"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - search-auto"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "remote - search-ask (default) [y]"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install test-pkgs/galaxy-test2.zip" =exit> 0 <input= "y\n"
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1)))
+
+   (shelly-case
+    "update"
+    (shelly-install "local packages can't be updated"
+                    "test-pkgs/galaxy-test1.zip"
+                    $ "raco pkg update galaxy-test1" =exit> 1)
+    (shelly-wind
+     $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1-update-test.zip"
+     $ "cp -f test-pkgs/galaxy-test1.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+     (shelly-install "remote packages can be updated"
+                     "http://localhost/galaxy-test1-update-test.zip"
+                     $ "raco pkg update galaxy-test1" =exit> 0 =stdout> "No updates available\n"
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+                     $ "raco pkg update galaxy-test1" =exit> 0
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+     (finally
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
+    (shelly-wind
+     $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1-update-test.zip"
+     $ "cp -f test-pkgs/galaxy-test1.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+     (shelly-install "update deps"
+                     "http://localhost/galaxy-test1-update-test.zip"
+                     $ "raco pkg install test-pkgs/galaxy-test2.zip"
+                     $ "raco pkg update --deps galaxy-test2" =exit> 0 =stdout> "No updates available\n"
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+                     $ "raco pkg update --deps galaxy-test2" =exit> 0
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+     (finally
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
+    (shelly-wind
+     $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1-update-test.zip"
+     $ "cp -f test-pkgs/galaxy-test1.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+     (shelly-install "update all"
+                     "http://localhost/galaxy-test1-update-test.zip"
+                     $ "raco pkg install test-pkgs/galaxy-test2.zip"
+                     $ "raco pkg update --all" =exit> 0 =stdout> "No updates available\n"
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
+                     $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
+                     $ "raco pkg update --all" =exit> 0
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+     (finally
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
+      $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
+    (shelly-wind
+     $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1.zip.bak"
+     $ "cp -f test-pkgs/galaxy-test1.zip.CHECKSUM test-pkgs/galaxy-test1.zip.CHECKSUM.bak"
+     (shelly-install "named remote packages can be update"
+                     "galaxy-test1"
+                     $ "raco pkg update galaxy-test1" =exit> 0 =stdout> "No updates available\n"
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                     ;; XXX force the indexer to check the other end's checksum
+                     $ "cp test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1.zip"
+                     $ "cp test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1.zip.CHECKSUM"
+                     $ "raco pkg update galaxy-test1" =exit> 0
+                     $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+     (finally
+     $ "cp -f test-pkgs/galaxy-test1.zip.bak test-pkgs/galaxy-test1.zip")))
+
+   (shelly-case
+    "remove"
+    (shelly-install "remove test"
+                    "test-pkgs/galaxy-test1.zip")
+    (shelly-install "remove of dep fails"
+                    "test-pkgs/galaxy-test1.zip"
+                    $ "raco pkg install test-pkgs/galaxy-test2.zip"
+                    $ "raco pkg remove galaxy-test1" =exit> 1
+                    $ "raco pkg remove galaxy-test2")
+    (shelly-install "remove of dep can be forced"
+                    "test-pkgs/galaxy-test1.zip"
+                    $ "raco pkg install test-pkgs/galaxy-test2.zip"
+                    $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+                    $ "raco pkg remove --force galaxy-test1"
+                    $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 1
+                    $ "raco pkg install test-pkgs/galaxy-test1.zip"
+                    $ "raco pkg remove galaxy-test2")
+    (with-fake-root
+     (shelly-case
+      "autoremove"
+      $ "racket -e '(require galaxy-test1)'" =exit> 1
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
+      $ "racket -e '(require galaxy-test1)'" =exit> 0
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test1)'" =exit> 0
+      $ "raco pkg remove --auto"
+      $ "racket -e '(require galaxy-test1)'" =exit> 1
+      $ "racket -e '(require galaxy-test2)'" =exit> 1)))
+
+   ;; XXX export (may export a package and compare the directory's contents)
+   ;; XXX export distribution (no clue)
+   ;; XXX show (list installed, mark the ones that are deps, show checksum and/or location on disk)
+   ;; XXX create (package a dir into plt and compute checksum)
+
+   ;; XXX system installation tests
+   )))

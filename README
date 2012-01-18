@@ -151,14 +151,14 @@ implementation and its use simple.
 
    The client will have access to
 
-   update       -- Only the named packages are checked
-   update+deps  -- The named packages and deps are checked
-   update-all   -- All installed packages are checked
+   update         -- Only the named packages are checked
+   update --deps  -- The named packages and deps are checked
+   update --all   -- All installed packages are checked
 
 ** Other package management
    remove               -- Remove a package
    
-   autoremove           -- Remove packages that were installed as dependencies
+   remove --auto        -- Remove packages that were installed as dependencies
    for removed packages
 
    export               -- Extract an archive of a package
