@@ -119,6 +119,31 @@
     $ "raco pkg show -h"
     $ "raco pkg create -h")
 
+   ;; XXX verify manifests in some way
+
+   (shelly-case
+    "create"
+    (define-syntax-rule (shelly-create fmt)
+      (shelly-case
+       (format "create format ~a" fmt)
+       $ (format "rm -f test-pkgs/galaxy-test1.~a test-pkgs/galaxy-test1.~a.CHECKSUM"
+                 fmt fmt)
+       $ (format "raco pkg create --format ~a test-pkgs/galaxy-test1"
+                 fmt)
+       $ (format "test -f test-pkgs/galaxy-test1.~a" fmt)
+       $ (format "test -f test-pkgs/galaxy-test1.~a.CHECKSUM" fmt)))
+
+    (shelly-create "tgz")
+    (shelly-create "zip")
+    (shelly-create "plt")
+
+    (shelly-case
+     "create is robust against ending /s"
+     $ "rm -f test-pkgs/galaxy-test1.tgz test-pkgs/galaxy-test1.tgz.CHECKSUM"
+     $ "raco pkg create --format tgz test-pkgs/galaxy-test1/"
+     $ "test -f test-pkgs/galaxy-test1.tgz"
+     $ "test -f test-pkgs/galaxy-test1.tgz.CHECKSUM"))
+
    (define-syntax-rule (shelly-install message pkg more ...)
      (with-fake-root
       (shelly-case
@@ -163,6 +188,10 @@
     "conflicts"
     (shelly-install "double install fails" "test-pkgs/galaxy-test1.zip"
                     $ "raco pkg install galaxy-test1.zip" =exit> 1)
+    (with-fake-root
+     (shelly-case
+      "conflicts with racket fail"
+      $ "raco pkg install racket-conflict.tgz" =exit> 1))
     (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
                     $ "raco pkg install galaxy-test1-conflict.zip" =exit> 1)
     (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
@@ -210,7 +239,17 @@
       $ "raco pkg install test-pkgs/galaxy-test1.zip" =exit> 0
       $ "raco pkg install test-pkgs/galaxy-test2.zip" =exit> 0
       $ "racket -e '(require galaxy-test2)'" =exit> 0
-      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 1
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test2"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+
+    (with-fake-root
+     (shelly-case
+      "local - looks at all packages given on cmdline"
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install test-pkgs/galaxy-test2.zip test-pkgs/galaxy-test1.zip" =exit> 0
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
       $ "raco pkg remove galaxy-test2"
       $ "racket -e '(require galaxy-test2)'" =exit> 1))
 
@@ -340,7 +379,7 @@
                      $ "raco pkg update galaxy-test1" =exit> 0
                      $ "racket -e '(require galaxy-test1/update)" =exit> 43)
      (finally
-     $ "cp -f test-pkgs/galaxy-test1.zip.bak test-pkgs/galaxy-test1.zip")))
+      $ "cp -f test-pkgs/galaxy-test1.zip.bak test-pkgs/galaxy-test1.zip")))
 
    (shelly-case
     "remove"
@@ -361,6 +400,18 @@
                     $ "raco pkg remove galaxy-test2")
     (with-fake-root
      (shelly-case
+      "remove two"
+      $ "racket -e '(require galaxy-test1)'" =exit> 1
+      $ "racket -e '(require galaxy-test2)'" =exit> 1
+      $ "raco pkg install test-pkgs/galaxy-test2.zip test-pkgs/galaxy-test1.zip" =exit> 0
+      $ "racket -e '(require galaxy-test1)'" =exit> 0
+      $ "racket -e '(require galaxy-test2)'" =exit> 0
+      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
+      $ "raco pkg remove galaxy-test1 galaxy-test2"
+      $ "racket -e '(require galaxy-test1)'" =exit> 1
+      $ "racket -e '(require galaxy-test2)'" =exit> 1))
+    (with-fake-root
+     (shelly-case
       "autoremove"
       $ "racket -e '(require galaxy-test1)'" =exit> 1
       $ "racket -e '(require galaxy-test2)'" =exit> 1
@@ -374,10 +425,11 @@
       $ "racket -e '(require galaxy-test1)'" =exit> 1
       $ "racket -e '(require galaxy-test2)'" =exit> 1)))
 
+   ;; XXX lock the installation directory
+   ;; XXX cause raco setup to run on the new roots afterwards
    ;; XXX export (may export a package and compare the directory's contents)
    ;; XXX export distribution (no clue)
    ;; XXX show (list installed, mark the ones that are deps, show checksum and/or location on disk)
-   ;; XXX create (package a dir into plt and compute checksum)
-
+   ;; XXX planet compatibility server
    ;; XXX system installation tests
    )))
