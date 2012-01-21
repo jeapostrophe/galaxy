@@ -10,7 +10,9 @@
          racket/file
          setup/link
          setup/pack
-         setup/unpack)
+         setup/unpack
+         racket/port
+         racket/list)
 
 (define (pkg-dir)
   (build-path (find-system-path 'addon-dir) "pkgs"))
@@ -59,9 +61,41 @@
                  [#"zip"
                   (system* (find-executable-path "unzip") pkg "-d" pkg-dir)]
                  [#"plt"                 
-                  (define orig-pkg (normalize-path pkg))
-                  (parameterize ([current-directory pkg-dir])
-                                (unpack orig-pkg))]
+                  ;; XXX This is to deal with the fact that
+                  ;; fold-plt-archive doesn't really give a
+                  ;; path-string? to the callback functions. Perhaps a
+                  ;; PR should be submitted?
+                  (define (path-descriptor->path pd)
+                    (if (or (eq? 'same pd)
+                            (path? pd))
+                        pd
+                        (second pd)))
+                  (define (write-file file* content-p)
+                    (define file (path-descriptor->path file*))
+                    (printf "\twriting ~a\n" file)
+                    (with-output-to-file 
+                        (build-path pkg-dir file)
+                      (λ () (copy-port content-p (current-output-port)))))
+                  ;; XXX writing this at all was necessary because
+                  ;; unpack seems to break on using "." and doesn't
+                  ;; allow me to not use the user collection path.
+                  (fold-plt-archive pkg
+                                    void
+                                    void
+                                    (λ (dir* _a)
+                                       (define dir (path-descriptor->path dir*))
+                                       (printf "\tmaking ~a\n" dir)
+                                       (unless (equal? (build-path 'same)
+                                                       dir)
+                                               (make-directory 
+                                                (build-path pkg-dir
+                                                            dir))))
+                                    (case-lambda
+                                     [(file content-p _a)
+                                      (write-file file content-p)]
+                                     [(file content-p _m _a)
+                                      (write-file file content-p)])
+                                    (void))]
                  [x
                   (error 'pkg "Invalid package format: ~e" x)])
           (links pkg-dir
