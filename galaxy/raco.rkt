@@ -18,6 +18,31 @@
   (define parent (path-only p))
   (make-directory* parent))
 
+(define (untar pkg pkg-dir #:strip-components [strip-components 0])
+  (make-directory* pkg-dir)
+  (system* (find-executable-path "tar") "-C" pkg-dir "-xvzf" pkg
+           "--strip-components" (number->string strip-components)))
+
+(define (call/input-url+200 u fun)
+  (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
+  (fun ip)
+  #;(match hs
+  [(regexp #rx"^HTTP/1.[01] 200" (list _))
+  (fun ip)]
+  [headers
+  (error 'pkg "Invalid headers for HTTP request of ~e: ~e"
+  (url->string u) headers)]))
+(define (download-file! url file)
+  (make-parent-directory* file)
+  (printf "\t\tDownloading ~a to ~a\n" (url->string url) file)
+  (call-with-output-file
+      file
+    #:exists 'replace
+    (λ (op)
+       (call/input-url+200
+        url
+        (λ (ip) (copy-port ip op))))))
+
 (define (pkg-dir)
   (build-path (find-system-path 'addon-dir) "pkgs"))
 (define (pkg-temporary-dir)
@@ -27,6 +52,7 @@
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
+(define install:link? #f)
 (define create:format "plt")
 
 (svn-style-command-line
@@ -44,6 +70,9 @@
     "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
     "  'search-auto' is like 'search-auto' but does not ask for permission to install.")
    (set! install:dep-behavior (string->symbol dep-behavior))]
+  ["--link"
+   "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
+   (set! install:link? #t)]
   #:args pkgs
   (begin
     (define (install-packages #:dep-behavior dep-behavior
@@ -61,7 +90,7 @@
           (make-directory* pkg-dir)
           (match pkg-format
                  [#"tgz"
-                  (system* (find-executable-path "tar") "-C" pkg-dir "-xvzf" pkg)]
+                  (untar pkg pkg-dir)]
                  [#"zip"
                   (system* (find-executable-path "unzip") pkg "-d" pkg-dir)]
                  [#"plt"
@@ -106,40 +135,53 @@
                  #:user? #t
                  #:root? #t)]
          [(directory-exists? pkg)
-          (define pkg-name (file-name-from-path pkg))
-          (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
-          (make-parent-directory* pkg-dir)
-          (copy-directory/files pkg pkg-dir)
-          (links pkg-dir
-                 #:user? #t
-                 #:root? #t)]
+          (cond
+           [install:link?
+            (links pkg
+                   #:user? #t
+                   #:root? #t)]
+           [else
+            (define pkg-name (file-name-from-path pkg))
+            (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
+            (make-parent-directory* pkg-dir)
+            (copy-directory/files pkg pkg-dir)
+            (links pkg-dir
+                   #:user? #t
+                   #:root? #t)])]
          [(url-scheme pkg-url)
           =>
           (match-lambda
-           ["git"
-            (error 'pkg "I don't know how to download from git")]
+           ["github"
+            (match-define (list* user repo branch path)
+                          (map path/param-path (url-path pkg-url)))
+            (define new-url
+              (url "https" #f "github.com" #f #t
+                   (map (λ (x) (path/param x empty))
+                        (list user repo "tarball" branch))
+                   empty
+                   #f))
+            (define tmp.tgz
+              (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
+            (define tmp-dir
+              (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
+            (define package-path
+              (apply build-path tmp-dir path))
+
+            ;; XXX curl http://github.com/api/v2/json/repos/show/jeapostrophe/galaxy/branches
+            (dynamic-wind
+                void
+                (λ ()
+                   (download-file! new-url tmp.tgz)
+                   (dynamic-wind
+                       void
+                       (λ ()
+                          (untar tmp.tgz tmp-dir #:strip-components 1)
+                          (install-package (path->string package-path)))
+                       (λ ()
+                          (delete-directory/files tmp-dir))))
+                (λ ()
+                   (delete-directory/files tmp.tgz)))]
            [_
-            (define (call/input-url+200 u fun)
-              (call/input-url
-               u get-impure-port
-               (λ (ip)
-                  (match (purify-port ip)
-                         [(regexp #rx"^HTTP/1.[01] 200" (list _))
-                          (void)]
-                         [headers
-                          (error 'pkg "Invalid headers for HTTP request of ~e: ~e"
-                                 (url->string u) headers)])
-                  (fun ip))))
-            (define (download-file! url file)
-              (make-parent-directory* file)
-              (printf "\t\tDownloading ~a to ~a\n" (url->string url) file)
-              (call-with-output-file
-                  file
-                #:exists 'replace
-                (λ (op)
-                   (call/input-url+200
-                    url
-                    (λ (ip) (copy-port ip op))))))
             (define url-last-component
               (path/param-path (last (url-path pkg-url))))
             (define url-looks-like-directory?

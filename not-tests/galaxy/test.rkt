@@ -87,7 +87,7 @@
 ;; This macro is intended to make Eli proud.
 
 (define (with-fake-root* t)
-  (define tmp-dir 
+  (define tmp-dir
     (make-temporary-file ".racket.fake-root~a" 'directory
                          (find-system-path 'home-dir)))
   (define tmp-dir-s
@@ -170,7 +170,7 @@
       $ "test -f test-pkgs/galaxy-test1.tgz"
       $ "test -f test-pkgs/galaxy-test1.tgz.CHECKSUM"))
 
-    (shelly-case 
+    (shelly-case
      "create MANIFESTs"
      $ "rm -f test-pkgs/galaxy-test1/MANIFEST"
      $ "raco pkg create --manifest test-pkgs/galaxy-test1/"
@@ -198,24 +198,31 @@
      ;; XXX Fail on unsupported package formats
      ;; XXX Fail on missing MANIFESTs
      ;; XXX Fail on MANIFESTs that contain .. files
+     ;; XXX Deal with checksums in github
+     ;; XXX error on remote git ending in /
      (shelly-install "remote/git"
-                     "git://github.com/jeapostrophe/galaxy.git/master/not-tests/galaxy/test-pkgs/galaxy-test1/")
-    ;; XXX throw error for a missing directory
+                     "github://github.com/jeapostrophe/galaxy/master/not-tests/galaxy/test-pkgs/galaxy-test1")
+     ;; XXX throw error for a missing directory
+     ;; XXX error (?) on ending /
      (shelly-install "local package (directory)" "test-pkgs/galaxy-test1")
 
-     (shelly-case
-      "linking example"
-      (shelly-wind
-       $ "cp -r test-pkgs/galaxy-test1 test-pkgs/galaxy-test1-linking"
-       (shelly-install "local package (directory, linked)"
-                       "--link test-pkgs/galaxy-test1-linking"
-                       $ "racket -e '(require galaxy-test1/a)" =exit> 1
-                       $ "cp test-pkgs/galaxy-test1-staging/a.rkt test-pkgs/galaxy-test1-linking/a.rkt"
-                       $ "racket -e '(require galaxy-test1/a)"
-                       $ "rm -f test-pkgs/galaxy-test1-linking/a.rkt"
-                       $ "racket -e '(require galaxy-test1/a)" =exit> 1)
-       (finally
-        $ "rm -r test-pkgs/galaxy-test1-linking")))
+     (with-fake-root
+      (shelly-case
+       "linking local directory"
+       (shelly-wind
+        $ "cp -r test-pkgs/galaxy-test1 test-pkgs/galaxy-test1-linking"
+        $ "racket -e '(require galaxy-test1)'" =exit> 1
+        $ "raco pkg install --link test-pkgs/galaxy-test1-linking"
+        $ "racket -e '(require galaxy-test1)'"
+        $ "racket -e '(require galaxy-test1/a)'" =exit> 1
+        $ "cp test-pkgs/galaxy-test1-staging/a.rkt test-pkgs/galaxy-test1-linking/galaxy-test1/a.rkt"
+        $ "racket -e '(require galaxy-test1/a)'"
+        $ "rm -f test-pkgs/galaxy-test1-linking/galaxy-test1/a.rkt"
+        $ "racket -e '(require galaxy-test1/a)'" =exit> 1
+        $ "raco pkg remove galaxy-test1-linking"
+        $ "racket -e '(require galaxy-test1)'" =exit> 1
+        (finally
+         $ "rm -r test-pkgs/galaxy-test1-linking"))))
 
      ;; XXX list of package indexes (not just default)
      (shelly-install "remote/name package" "galaxy-test1"))
@@ -231,9 +238,9 @@
      (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
                      $ "raco pkg install galaxy-test1-conflict.zip" =exit> 1)
      (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
-                     $ "racket -e '(require galaxy-test1/conflict)" =exit> 42
+                     $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
                      $ "raco pkg install --force galaxy-test1-conflict.zip" =exit> 0
-                     $ "racket -e '(require galaxy-test1/conflict)" =exit> 43))
+                     $ "racket -e '(require galaxy-test1/conflict)'" =exit> 43))
 
     (shelly-case
      "checksums"
@@ -364,11 +371,11 @@
       (shelly-install "remote packages can be updated"
                       "http://localhost:9999/galaxy-test1-update-test.zip"
                       $ "raco pkg update galaxy-test1" =exit> 0 =stdout> "No updates available\n"
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 42
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
                       $ "raco pkg update galaxy-test1" =exit> 0
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 43)
       (finally
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
@@ -379,11 +386,11 @@
                       "http://localhost:9999/galaxy-test1-update-test.zip"
                       $ "raco pkg install test-pkgs/galaxy-test2.zip"
                       $ "raco pkg update --deps galaxy-test2" =exit> 0 =stdout> "No updates available\n"
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 42
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
                       $ "raco pkg update --deps galaxy-test2" =exit> 0
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 43)
       (finally
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
@@ -394,11 +401,11 @@
                       "http://localhost:9999/galaxy-test1-update-test.zip"
                       $ "raco pkg install test-pkgs/galaxy-test2.zip"
                       $ "raco pkg update --all" =exit> 0 =stdout> "No updates available\n"
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 42
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1-update-test.zip"
                       $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"
                       $ "raco pkg update --all" =exit> 0
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 43)
       (finally
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip"
        $ "rm -f test-pkgs/galaxy-test1-update-test.zip.CHECKSUM"))
@@ -408,17 +415,19 @@
       (shelly-install "named remote packages can be update"
                       "galaxy-test1"
                       $ "raco pkg update galaxy-test1" =exit> 0 =stdout> "No updates available\n"
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 42
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 42
                       ;; XXX force the indexer to check the other end's checksum
                       $ "cp test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1.zip"
                       $ "cp test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1.zip.CHECKSUM"
                       $ "raco pkg update galaxy-test1" =exit> 0
-                      $ "racket -e '(require galaxy-test1/update)" =exit> 43)
+                      $ "racket -e '(require galaxy-test1/update)'" =exit> 43)
       (finally
        $ "cp -f test-pkgs/galaxy-test1.zip.bak test-pkgs/galaxy-test1.zip")))
 
     (shelly-case
      "remove"
+     (shelly-case "remove of not installed package fails"
+                  $ "raco pkg remove not-there" =exit> 1)
      (shelly-install "remove test"
                      "test-pkgs/galaxy-test1.zip")
      (shelly-install "remove of dep fails"
