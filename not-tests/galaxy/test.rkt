@@ -123,13 +123,29 @@
                  #:port 9999
                  #:extra-files-paths (list (build-path test-directory "test-pkgs"))))
 
-(define (with-server* t)
-  (with-thread (λ () (start-file-server))
-               t))
-(define-syntax-rule (with-server e ...)
-  (with-server* (λ () e ...)))
+(require not-meta/galaxy-index/basic/main)
+(define *index-ht-1* (make-hash))
+(define *index-ht-2* (make-hash))
+(define (start-galaxy-server index-ht port)
+  (serve/servlet (galaxy-index/basic 
+                  (λ (pkg-name) (hash-ref index-ht pkg-name)))
+                 #:command-line? #t
+                 #:servlet-regexp #rx""
+                 #:port port))
 
-(with-server
+(define (with-servers* t)
+  (with-thread
+   (λ () (start-galaxy-server *index-ht-1* 9990))
+   (λ ()
+      (with-thread
+       (λ () (start-galaxy-server *index-ht-2* 9991))
+       (λ ()
+          (with-thread (λ () (start-file-server))
+                       t))))))
+(define-syntax-rule (with-servers e ...)
+  (with-servers* (λ () e ...)))
+
+(with-servers
  (with-fake-root
   (parameterize
    ([current-directory test-directory])
@@ -142,7 +158,8 @@
      $ "raco pkg remove -h"
      $ "raco pkg export -h"
      $ "raco pkg show -h"
-     $ "raco pkg create -h")
+     $ "raco pkg create -h"
+     $ "raco pkg config -h")
 
     ;; XXX verify manifests in some way
 
@@ -225,19 +242,36 @@
         (finally
          $ "rm -r test-pkgs/galaxy-test1-linking"))))
 
+     (hash-set! *index-ht-1* "galaxy-test1"
+                (hasheq 'checksum 
+                        (file->string "test-pkgs/galaxy-test1.tgz.CHECKSUM")
+                        'source
+                        "http://localhost:9999/galaxy-test1.tgz"))
+
      ;; XXX list of package indexes (not just default)
-     (shelly-install "remote/name package" "galaxy-test1"))
+     ;; XXX make sure it fails when a package doesn't exist on the server
+     (with-fake-root
+      (shelly-case
+       "remote/name package"
+       $ "raco pkg config --set indexes http://localhost:9990"
+       $ "racket -e '(require galaxy-test1)'" =exit> 1
+       $ "raco pkg install galaxy-test1"
+       $ "racket -e '(require galaxy-test1)'"
+       $ "raco pkg remove galaxy-test1"
+       $ "racket -e '(require galaxy-test1)'" =exit> 1))
 
     (shelly-case
      "conflicts"
      (shelly-install "double install fails" "test-pkgs/galaxy-test1.zip"
-                     $ "raco pkg install galaxy-test1.zip" =exit> 1)
+                     $ "raco pkg install test-pkgs/galaxy-test1.zip" =exit> 1)
      (with-fake-root
       (shelly-case
        "conflicts with racket fail"
-       $ "raco pkg install racket-conflict.tgz" =exit> 1))
+       $ "test -f test-pkgs/racket-conflict.tgz"
+       $ "raco pkg install test-pkgs/racket-conflict.tgz" =exit> 1))
      (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
-                     $ "raco pkg install galaxy-test1-conflict.zip" =exit> 1)
+                     $ "test-f test-pkgs/galaxy-test1-conflict.zip"
+                     $ "raco pkg install test-pkgs/galaxy-test1-conflict.zip" =exit> 1)
      (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
                      $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
                      $ "raco pkg install --force galaxy-test1-conflict.zip" =exit> 0
@@ -245,12 +279,14 @@
 
     (shelly-case
      "checksums"
+     $ "test -f test-pkgs/galaxy-test1-bad-checksum.zip"
      (with-fake-root
       (shelly-case
        "checksums are checked if present (local)"
        $ "racket -e '(require galaxy-test1)'" =exit> 1
        $ "raco pkg install test-pkgs/galaxy-test1-bad-checksum.zip" =exit> 1
        $ "racket -e '(require galaxy-test1)'" =exit> 1))
+     $ "test -f test-pkgs/galaxy-test1-no-checksum.zip"
      (shelly-install "checksums are ignored if missing by default (local)"
                      "test-pkgs/galaxy-test1-no-checksum.zip")
      (with-fake-root
@@ -275,6 +311,7 @@
     (shelly-case
      "dependencies"
 
+     $ "test -f test-pkgs/galaxy-test2.zip"
      (with-fake-root
       (shelly-case
        "local - fail (default)"
@@ -478,4 +515,5 @@
     ;; XXX show (list installed, mark the ones that are deps, show checksum and/or location on disk)
     ;; XXX planet compatibility server
     ;; XXX system installation tests
-    ))))
+    ;; XXX more config tests (viewing)
+    )))))

@@ -45,6 +45,8 @@
 
 (define (pkg-dir)
   (build-path (find-system-path 'addon-dir) "pkgs"))
+(define (pkg-config-file)
+  (build-path (pkg-dir) "config.rktd"))
 (define (pkg-db-file)
   (build-path (pkg-dir) "pkgs.rktd"))
 (define (pkg-temporary-dir)
@@ -53,25 +55,34 @@
   (build-path (pkg-dir) "installed"))
 
 ;; XXX with-file-lock
-(define (read-pkg-db)
+;; XXX make structs
+(define (read-file-hash file)
   (define the-db
     (with-handlers ([exn? (λ (x) (hash))])
-                   (file->value (pkg-db-file))))
-  (printf "\t\tread ~v\n" the-db)
+                   (file->value file)))
   the-db)
-(define (update-pkg-db! pkg-name info)
+(define (write-file-hash! file key val)
   (define new-db
-    (hash-set (read-pkg-db) pkg-name info))
-  (make-parent-directory* (pkg-db-file))
-  (with-output-to-file (pkg-db-file)
+    (hash-set (read-file-hash file) key val))
+  (make-parent-directory* file)
+  (with-output-to-file file
     #:exists 'replace
-    (λ () (write new-db)))
-  (printf "\t\twrote ~v\n" new-db))
+    (λ () (write new-db))))
+
+(define (read-pkg-db)
+  (read-file-hash (pkg-db-file)))
+(define (update-pkg-db! pkg-name info)
+  (write-file-hash! (pkg-db-file) pkg-name info))
+(define (read-pkg-cfg)
+  (read-file-hash (pkg-config-file)))
+(define (update-pkg-cfg! key val)
+  (write-file-hash! (pkg-config-file) key val))
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
 (define install:link? #f)
 (define create:format "plt")
+(define config:set #t)
 
 (svn-style-command-line
  #:program (short-program+command-name)
@@ -242,7 +253,18 @@
                 (λ ()
                    (delete-directory/files package-path)))])]
          [else
-          (error 'pkg "I don't know how to install names: ~e" pkg)]))
+          ;; XXX no error handling or checksums
+          (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes"))])
+                  (define iu (string->url i))
+                  (install-package
+                   (hash-ref
+                    (call/input-url+200
+                     (combine-url/relative
+                      iu
+                      ;; XXX not robust against pkgs with / in name
+                      (format "/pkg/~a" pkg))
+                     read)
+                    'source)))]))
       (define (install-package/outer pkg)
         (define pkg-name
           (install-package pkg))
@@ -263,7 +285,7 @@
   #:args pkgs
   (begin
     (define (remove-package pkg-name)
-      (match-define (list 'pkg-info orig-pkg install:link?) 
+      (match-define (list 'pkg-info orig-pkg install:link?)
                     (hash-ref (read-pkg-db) pkg-name))
       (cond
        [install:link?
@@ -272,7 +294,7 @@
                #:user? #t
                #:root? #t)]
        [else
-        (define pkg-dir 
+        (define pkg-dir
           (build-path (pkg-installed-dir) pkg-name))
         (links pkg-dir
                #:remove? #t
@@ -288,6 +310,18 @@
   "Show information about installed packages"
   #:args ()
   (void)]
+ ["config"         "View and modify the package configuration"
+  "View and modify the package configuration"
+  #:once-any
+  [("--set") "Completely replace the value"
+   (set! config:set #t)]
+  #:args (key val)
+  (match
+   key
+   ["indexes"
+    (cond
+     [config:set
+      (update-pkg-cfg! key (list val))])])]
  ["create"       "Bundle a new package"
   "Bundle a new package"
   #:once-any
