@@ -200,8 +200,9 @@
      ;; XXX Fail on MANIFESTs that contain .. files
      ;; XXX Deal with checksums in github
      ;; XXX error on remote git ending in /
-     (shelly-install "remote/git"
+     (shelly-install "remote/github"
                      "github://github.com/jeapostrophe/galaxy/master/not-tests/galaxy/test-pkgs/galaxy-test1")
+     ;; XXX support normal git as well
      ;; XXX throw error for a missing directory
      ;; XXX error (?) on ending /
      (shelly-install "local package (directory)" "test-pkgs/galaxy-test1")

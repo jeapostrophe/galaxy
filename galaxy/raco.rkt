@@ -45,10 +45,28 @@
 
 (define (pkg-dir)
   (build-path (find-system-path 'addon-dir) "pkgs"))
+(define (pkg-db-file)
+  (build-path (pkg-dir) "pkgs.rktd"))
 (define (pkg-temporary-dir)
   (build-path (pkg-dir) "tmp"))
 (define (pkg-installed-dir)
   (build-path (pkg-dir) "installed"))
+
+;; XXX with-file-lock
+(define (read-pkg-db)
+  (define the-db
+    (with-handlers ([exn? (λ (x) (hash))])
+                   (file->value (pkg-db-file))))
+  (printf "\t\tread ~v\n" the-db)
+  the-db)
+(define (update-pkg-db! pkg-name info)
+  (define new-db
+    (hash-set (read-pkg-db) pkg-name info))
+  (make-parent-directory* (pkg-db-file))
+  (with-output-to-file (pkg-db-file)
+    #:exists 'replace
+    (λ () (write new-db)))
+  (printf "\t\twrote ~v\n" new-db))
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
@@ -133,21 +151,23 @@
                   (error 'pkg "Invalid package format: ~e" x)])
           (links pkg-dir
                  #:user? #t
-                 #:root? #t)]
+                 #:root? #t)
+          pkg-name]
          [(directory-exists? pkg)
+          (define pkg-name (file-name-from-path pkg))
           (cond
            [install:link?
             (links pkg
                    #:user? #t
                    #:root? #t)]
            [else
-            (define pkg-name (file-name-from-path pkg))
             (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
             (links pkg-dir
                    #:user? #t
-                   #:root? #t)])]
+                   #:root? #t)])
+          (path->string pkg-name)]
          [(url-scheme pkg-url)
           =>
           (match-lambda
@@ -223,7 +243,15 @@
                    (delete-directory/files package-path)))])]
          [else
           (error 'pkg "I don't know how to install names: ~e" pkg)]))
-      (for-each install-package pkgs))
+      (define (install-package/outer pkg)
+        (define pkg-name
+          (install-package pkg))
+        (update-pkg-db! pkg-name
+                        ;; XXX pkg should be fully resolved so there
+                        ;; aren't relative paths to the original
+                        ;; install location
+                        (list 'pkg-info pkg install:link?)))
+      (for-each install-package/outer pkgs))
     (install-packages #:dep-behavior install:dep-behavior
                       pkgs))]
  ["update"       "Update packages"
@@ -234,10 +262,23 @@
   "Remove packages"
   #:args pkgs
   (begin
-    (define (remove-package pkg)
-      (system (format "ls ~a" (pkg-installed-dir)))
-      (delete-directory/files
-       (build-path (pkg-installed-dir) pkg)))
+    (define (remove-package pkg-name)
+      (match-define (list 'pkg-info orig-pkg install:link?) 
+                    (hash-ref (read-pkg-db) pkg-name))
+      (cond
+       [install:link?
+        (links orig-pkg
+               #:remove? #t
+               #:user? #t
+               #:root? #t)]
+       [else
+        (define pkg-dir 
+          (build-path (pkg-installed-dir) pkg-name))
+        (links pkg-dir
+               #:remove? #t
+               #:user? #t
+               #:root? #t)
+        (delete-directory/files pkg-dir)]))
     (for-each remove-package pkgs))]
  ["export"       "Export a package or distribution"
   "Export a package or distribution"
