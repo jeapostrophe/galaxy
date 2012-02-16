@@ -12,11 +12,8 @@
          setup/pack
          setup/unpack
          racket/port
-         racket/list)
-
-(define (make-parent-directory* p)
-  (define parent (path-only p))
-  (make-directory* parent))
+         racket/list
+         "util.rkt")
 
 (define (untar pkg pkg-dir #:strip-components [strip-components 0])
   (make-directory* pkg-dir)
@@ -121,7 +118,7 @@
                  [#"tgz"
                   (untar pkg pkg-dir)]
                  [#"zip"
-                  (system* (find-executable-path "unzip") pkg "-d" pkg-dir)]
+                  (system* (find-executable-path "unzip") "-n" pkg "-d" pkg-dir)]
                  [#"plt"
                   ;; XXX This is to deal with the fact that
                   ;; fold-plt-archive doesn't really give a
