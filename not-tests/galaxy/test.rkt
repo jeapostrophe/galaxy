@@ -310,8 +310,14 @@
                       $ "raco pkg install test-pkgs/galaxy-test1-conflict.zip" =exit> 1)
       (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
                       $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
-                      $ "raco pkg install --force galaxy-test1-conflict.zip" =exit> 0
-                      $ "racket -e '(require galaxy-test1/conflict)'" =exit> 43))
+                      $ "raco pkg install --force test-pkgs/galaxy-test1-conflict.zip" =exit> 0
+                      $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
+                      $ "raco pkg remove galaxy-test1-conflict")
+      (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1-conflict.zip"
+                      $ "racket -e '(require galaxy-test1/conflict)'" =exit> 43
+                      $ "raco pkg install --force test-pkgs/galaxy-test1.zip" =exit> 0
+                      $ "racket -e '(require galaxy-test1/conflict)'" =exit> 43
+                      $ "raco pkg remove galaxy-test1-conflict"))
 
      (shelly-case
       "checksums"

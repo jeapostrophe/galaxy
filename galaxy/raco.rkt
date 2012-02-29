@@ -90,6 +90,7 @@
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
 (define install:link? #f)
+(define install:force? #f)
 (define create:format "plt")
 (define config:set #t)
 
@@ -108,6 +109,9 @@
     "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
     "  'search-auto' is like 'search-auto' but does not ask for permission to install.")
    (set! install:dep-behavior (string->symbol dep-behavior))]
+  ["--force"
+   "Ignores conflicts"
+   (set! install:force? #t)]
   ["--link"
    "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
    (set! install:link? #t)]
@@ -266,7 +270,7 @@
                  (delete-directory/files package-path)))])]
           [else
            ;; XXX no error handling or checksums
-           (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes"))])
+           (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
              (define iu (string->url i))
              (install-package
               (hash-ref
@@ -287,14 +291,15 @@
         (cond
           [(hash-ref (read-pkg-db) pkg-name #f)
            (error 'galaxy "~e is already installed" pkg-name)]
-          [(for/or ([f (in-list (directory-list* pkg-dir))])
-             (or (and (file-exists? (build-path (absolute-collects-dir) f))
-                      "racket")                 
-                 (for/or ([other-pkg (in-hash-keys (read-pkg-db))])
-                   (define p (build-path (pkg-installed-dir) other-pkg f))
-                   (printf "\t\t\t~a vs ~a\n" f p)
-                   (and (file-exists? p)
-                        other-pkg))))
+          [(and
+            (not install:force?)
+            (for/or ([f (in-list (directory-list* pkg-dir))])
+              (or (and (file-exists? (build-path (absolute-collects-dir) f))
+                       "racket")                 
+                  (for/or ([other-pkg (in-hash-keys (read-pkg-db))])
+                    (define p (build-path (pkg-installed-dir) other-pkg f))
+                    (and (file-exists? p)
+                         other-pkg)))))
            =>
            (λ (conflicting-pkg)
              (error 'galaxy "conflicts with ~e" conflicting-pkg))]
