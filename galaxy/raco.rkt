@@ -69,6 +69,8 @@
 (define (update-pkg-cfg! key val)
   (write-file-hash! (pkg-config-file) key val))
 
+(struct install-info (name directory))
+
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
 (define install:link? #f)
@@ -105,9 +107,10 @@
            (define pkg-format (filename-extension pkg))
            (define pkg-name
              (or given-pkg-name
-                 (regexp-replace (regexp (format "~a$" (regexp-quote (format ".~a" pkg-format))))
-                             (path->string (file-name-from-path pkg))
-                             "")))
+                 (regexp-replace
+                  (regexp (format "~a$" (regexp-quote (format ".~a" pkg-format))))
+                  (path->string (file-name-from-path pkg))
+                  "")))
            (define pkg-dir (build-path (pkg-temporary-dir) pkg-name))
            (make-directory* pkg-dir)
            (match pkg-format
@@ -129,7 +132,7 @@
                 (define file (path-descriptor->path file*))
                 (printf "\twriting ~a\n" file)
                 (with-output-to-file
-                  (build-path pkg-dir file)
+                    (build-path pkg-dir file)
                   (λ () (copy-port content-p (current-output-port)))))
               ;; XXX writing this at all was necessary because
               ;; unpack seems to break on using "." and doesn't
@@ -153,26 +156,24 @@
                                 (void))]
              [x
               (error 'pkg "Invalid package format: ~e" x)])
-           (begin0
-             (install-package pkg-dir
-                              #:pkg-name pkg-name)
-             (delete-directory/files pkg-dir))]
+           (dynamic-wind
+             void
+             (λ ()
+               (install-package pkg-dir
+                                #:pkg-name pkg-name))
+             (λ ()
+               (delete-directory/files pkg-dir)))]
           [(directory-exists? pkg)
-           (define pkg-name 
+           (define pkg-name
              (or given-pkg-name (path->string (file-name-from-path pkg))))
            (cond
              [install:link?
-              (links pkg
-                     #:user? #t
-                     #:root? #t)]
+              (install-info pkg-name pkg)]
              [else
               (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
               (make-parent-directory* pkg-dir)
               (copy-directory/files pkg pkg-dir)
-              (links pkg-dir
-                     #:user? #t
-                     #:root? #t)])
-           pkg-name]
+              (install-info pkg-name pkg-dir)])]
           [(url-scheme pkg-url)
            =>
            (match-lambda
@@ -261,8 +262,12 @@
                 read)
                'source)))]))
       (define (install-package/outer pkg)
-        (define pkg-name
-          (install-package pkg))
+        (match-define
+         (install-info pkg-name pkg-dir)
+         (install-package pkg))
+        (links pkg-dir
+               #:user? #t
+               #:root? #t)
         (update-pkg-db! pkg-name
                         ;; XXX pkg should be fully resolved so there
                         ;; aren't relative paths to the original
@@ -334,7 +339,7 @@
         create:format
       ["MANIFEST"
        (with-output-to-file
-         (build-path dir "MANIFEST")
+           (build-path dir "MANIFEST")
          #:exists 'replace
          (λ ()
            (for ([f (in-list (parameterize ([current-directory dir])
@@ -363,4 +368,4 @@
           (error 'pkg "Invalid package format: ~e" x)])
        (define chk (format "~a.CHECKSUM" pkg))
        (with-output-to-file chk #:exists 'replace
-         (λ () (display (call-with-input-file pkg sha1))))]))])
+                            (λ () (display (call-with-input-file pkg sha1))))]))])
