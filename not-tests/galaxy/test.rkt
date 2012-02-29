@@ -285,6 +285,8 @@
      ;; XXX make sure it can't read arbitrary files
      ;; XXX test with the official server
 
+     ;; XXX conflict of a different name with same content
+     ;; XXX conflict of the same name with different content
      (shelly-case
       "conflicts"
       (shelly-install "double install fails" "test-pkgs/galaxy-test1.zip"
