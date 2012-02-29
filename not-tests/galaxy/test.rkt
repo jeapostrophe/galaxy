@@ -188,19 +188,28 @@
 
     (shelly-case
      "create"
-     (define-syntax-rule (shelly-create fmt)
+
+     (shelly-case 
+      "create fails on missing directories"
+      $ "rm -fr test-pkgs/does-not-exist test-pkgs/does-not-exist.tgz"
+      $ "raco pkg create --format tgz test-pkgs/does-not-exist" =exit> 1
+      $ "test -f test-pkgs/does-not-exist.tgz" =exit> 1)
+
+     (define-syntax-rule (shelly-create pkg fmt)
        (shelly-case
         (format "create format ~a" fmt)
-        $ (format "rm -f test-pkgs/galaxy-test1.~a test-pkgs/galaxy-test1.~a.CHECKSUM"
-                  fmt fmt)
-        $ (format "raco pkg create --format ~a test-pkgs/galaxy-test1"
-                  fmt)
-        $ (format "test -f test-pkgs/galaxy-test1.~a" fmt)
-        $ (format "test -f test-pkgs/galaxy-test1.~a.CHECKSUM" fmt)))
+        $ (format "rm -f test-pkgs/~a.~a test-pkgs/~a.~a.CHECKSUM"
+                  pkg fmt pkg fmt)
+        $ (format "raco pkg create --format ~a test-pkgs/~a"
+                  fmt pkg)
+        $ (format "test -f test-pkgs/~a.~a" pkg fmt)
+        $ (format "test -f test-pkgs/~a.~a.CHECKSUM" pkg fmt)))
 
-     (shelly-create "tgz")
-     (shelly-create "zip")
-     (shelly-create "plt")
+     (shelly-create "galaxy-test1" "tgz")
+     (shelly-create "galaxy-test1" "zip")
+     (shelly-create "galaxy-test1-conflict" "zip")
+     (shelly-create "galaxy-test1" "plt")
+     (shelly-create "racket-conflict" "tgz")
 
      ;; XXX throw error for a missing directory
      (shelly-case
@@ -297,7 +306,7 @@
         $ "test -f test-pkgs/racket-conflict.tgz"
         $ "raco pkg install test-pkgs/racket-conflict.tgz" =exit> 1))
       (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
-                      $ "test-f test-pkgs/galaxy-test1-conflict.zip"
+                      $ "test -f test-pkgs/galaxy-test1-conflict.zip"
                       $ "raco pkg install test-pkgs/galaxy-test1-conflict.zip" =exit> 1)
       (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
                       $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42

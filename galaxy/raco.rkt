@@ -13,7 +13,23 @@
          setup/unpack
          racket/port
          racket/list
+         racket/function
          "util.rkt")
+
+(define (absolute-collects-dir)
+  (path->complete-path
+   (find-system-path 'collects-dir)
+   (path-only (find-executable-path (find-system-path 'exec-file)))))
+
+(define (directory-list* d)
+  (append-map
+   (λ (pp)
+     (define p (build-path d pp))
+     (if (directory-exists? p)
+       (map (curry build-path pp)
+            (directory-list* p))
+       (list pp)))
+   (directory-list d)))
 
 (define (untar pkg pkg-dir #:strip-components [strip-components 0])
   (make-directory* pkg-dir)
@@ -265,14 +281,32 @@
         (match-define
          (install-info pkg-name pkg-dir)
          (install-package pkg))
-        (links pkg-dir
+        ;; XXX At this point, we shouldn't create anything in the
+        ;; install directory, but right now I do
+        ;; XXX delete pkg-dir if i can (or errors)
+        (cond
+          [(hash-ref (read-pkg-db) pkg-name #f)
+           (error 'galaxy "~e is already installed" pkg-name)]
+          [(for/or ([f (in-list (directory-list* pkg-dir))])
+             (or (and (file-exists? (build-path (absolute-collects-dir) f))
+                      "racket")                 
+                 (for/or ([other-pkg (in-hash-keys (read-pkg-db))])
+                   (define p (build-path (pkg-installed-dir) other-pkg f))
+                   (printf "\t\t\t~a vs ~a\n" f p)
+                   (and (file-exists? p)
+                        other-pkg))))
+           =>
+           (λ (conflicting-pkg)
+             (error 'galaxy "conflicts with ~e" conflicting-pkg))]
+          [else
+           (links pkg-dir
                #:user? #t
                #:root? #t)
-        (update-pkg-db! pkg-name
-                        ;; XXX pkg should be fully resolved so there
-                        ;; aren't relative paths to the original
-                        ;; install location
-                        (list 'pkg-info pkg install:link?)))
+           (update-pkg-db! pkg-name
+                           ;; XXX pkg should be fully resolved so there
+                           ;; aren't relative paths to the original
+                           ;; install location
+                           (list 'pkg-info pkg install:link?))]))
       (for-each install-package/outer pkgs))
     (install-packages #:dep-behavior install:dep-behavior
                       pkgs))]
@@ -355,12 +389,16 @@
           ""))
        (match create:format
          ["tgz"
-          (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")]
+          (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
+            (delete-directory/files pkg)
+            (error 'galaxy "Package creation failed"))]
          ["zip"
           (define orig-pkg (normalize-path pkg))
           (parameterize
               ([current-directory dir])
-            (system* (find-executable-path "zip") "-r" orig-pkg "."))]
+            (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
+              (delete-directory/files pkg)
+              (error 'galaxy "Package creation failed")))]
          ["plt"
           (pack-plt pkg pkg-name (list dir)
                     #:as-paths (list "."))]
