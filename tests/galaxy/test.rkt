@@ -211,6 +211,8 @@
      (shelly-create "galaxy-test1" "plt")
      (shelly-create "racket-conflict" "tgz")
 
+     (shelly-create "galaxy-test2" "zip")
+
      ;; XXX throw error for a missing directory
      (shelly-case
       "create is robust against ending /s"
@@ -225,7 +227,7 @@
      $ "raco pkg create --manifest test-pkgs/galaxy-test1/"
      $ "test -f test-pkgs/galaxy-test1/MANIFEST")
 
-    (define-syntax-rule (shelly-install message pkg more ...)
+    (define-syntax-rule (shelly-install* message pkg rm-pkg more ...)
       (with-fake-root
        (shelly-case
         (format "Test installation of ~a" message)
@@ -233,8 +235,12 @@
         $ (format "raco pkg install ~a" pkg)
         $ "racket -e '(require galaxy-test1)'"
         more ...
-        $ "raco pkg remove galaxy-test1"
+        $ (format "raco pkg remove ~a" rm-pkg)
         $ "racket -e '(require galaxy-test1)'" =exit> 1)))
+
+    (define-syntax-rule (shelly-install message pkg more ...)
+      (shelly-install* message pkg "galaxy-test1" more ...))
+
     (shelly-case
      "raco pkg install tests"
      (shelly-install "local package (tgz)" "test-pkgs/galaxy-test1.tgz")
@@ -321,16 +327,22 @@
 
      (shelly-case
       "checksums"
-      $ "test -f test-pkgs/galaxy-test1-bad-checksum.zip"
+      $ "test -f test-pkgs/galaxy-test1.zip"
+      $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1-bad-checksum.zip"
+      $ "test -f test-pkgs/galaxy-test1-conflict.zip.CHECKSUM"
+      $ "cp -f test-pkgs/galaxy-test1-conflict.zip.CHECKSUM test-pkgs/galaxy-test1-bad-checksum.zip.CHECKSUM"
       (with-fake-root
        (shelly-case
         "checksums are checked if present (local)"
         $ "racket -e '(require galaxy-test1)'" =exit> 1
         $ "raco pkg install test-pkgs/galaxy-test1-bad-checksum.zip" =exit> 1
         $ "racket -e '(require galaxy-test1)'" =exit> 1))
-      $ "test -f test-pkgs/galaxy-test1-no-checksum.zip"
-      (shelly-install "checksums are ignored if missing by default (local)"
-                      "test-pkgs/galaxy-test1-no-checksum.zip")
+      $ "cp -f test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1-no-checksum.zip"
+
+      (shelly-install* "checksums are ignored if missing by default (local)"
+                       "test-pkgs/galaxy-test1-no-checksum.zip"
+                       "galaxy-test1-no-checksum")
+
       (with-fake-root
        (shelly-case
         "checksums are checked (remote)"
@@ -343,12 +355,15 @@
         $ "racket -e '(require galaxy-test1)'" =exit> 1
         $ "raco pkg install http://localhost:9999/galaxy-test1-no-checksum.zip" =exit> 1
         $ "racket -e '(require galaxy-test1)'" =exit> 1))
-      (shelly-install "but, bad checksums can be ignored (local)"
-                      "--ignore-checksums test-pkgs/galaxy-test1-bad-checksum.zip")
-      (shelly-install "but, bad checksums can be ignored (remote)"
-                      "--ignore-checksums http://localhost:9999/galaxy-test1-bad-checksum.zip")
-      (shelly-install "but, checksums can be missing if ignored (remote)"
-                      "--ignore-checksums http://localhost:9999/galaxy-test1-no-checksum.zip"))
+      (shelly-install* "but, bad checksums can be ignored (local)"
+                       "--ignore-checksums test-pkgs/galaxy-test1-bad-checksum.zip"
+                       "galaxy-test1-bad-checksum")
+      (shelly-install* "but, bad checksums can be ignored (remote)"
+                       "--ignore-checksums http://localhost:9999/galaxy-test1-bad-checksum.zip"
+                       "galaxy-test1-bad-checksum")
+      (shelly-install* "but, checksums can be missing if ignored (remote)"
+                       "--ignore-checksums http://localhost:9999/galaxy-test1-no-checksum.zip"
+                       "galaxy-test1-no-checksum"))
 
      (shelly-case
       "dependencies"

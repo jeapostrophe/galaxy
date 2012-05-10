@@ -39,16 +39,21 @@
 (define (call/input-url+200 u fun)
   (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
   (fun ip))
-(define (download-file! url file)
-  (make-parent-directory* file)
-  (printf "\t\tDownloading ~a to ~a\n" (url->string url) file)
-  (call-with-output-file
-      file
-    #:exists 'replace
-    (λ (op)
-      (call/input-url+200
-       url
-       (λ (ip) (copy-port ip op))))))
+(define (download-file! url file #:fail-okay? [fail-okay? #f])
+  (with-handlers
+      ([exn:fail?
+        (λ (x)
+          (unless fail-okay?
+            (raise x)))])
+    (make-parent-directory* file)
+    (printf "\t\tDownloading ~a to ~a\n" (url->string url) file)
+    (call-with-output-file
+        file
+      #:exists 'replace
+      (λ (op)
+        (call/input-url+200
+         url
+         (λ (ip) (copy-port ip op)))))))
 
 (define (pkg-dir)
   (build-path (find-system-path 'addon-dir) "pkgs"))
@@ -91,6 +96,7 @@
 (define install:dep-behavior #f)
 (define install:link? #f)
 (define install:force? #f)
+(define install:check-sums? #t)
 (define create:format "plt")
 (define config:set #t)
 
@@ -112,6 +118,9 @@
   ["--force"
    "Ignores conflicts"
    (set! install:force? #t)]
+  ["--ignore-checksums"
+   "Ignores checksums"
+   (set! install:check-sums? #f)]
   ["--link"
    "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
    (set! install:link? #t)]
@@ -124,6 +133,14 @@
         (define pkg-url (and (string? pkg) (string->url pkg)))
         (cond
           [(file-exists? pkg)
+           (define checksum-pth (format "~a.CHECKSUM" pkg))
+           (unless (or (not (file-exists? checksum-pth))
+                       (not install:check-sums?)
+                       (string=? (file->string checksum-pth) 
+                                 (with-input-from-file pkg
+                                   (λ ()
+                                     (sha1 (current-input-port))))))
+             (error 'pkg "Incorrect checksum on package"))
            (define pkg-format (filename-extension pkg))
            (define pkg-name
              (or given-pkg-name
@@ -255,9 +272,13 @@
                  [else
                   (define package-path
                     (build-path (pkg-temporary-dir) url-last-component))
+                  ;; XXX include checksum in list to delete it?
                   (values package-path
                           (λ ()
-                            (download-file! pkg-url package-path)))]))
+                            (download-file! pkg-url package-path)
+                            (download-file! (string->url (string-append (url->string pkg-url) ".CHECKSUM"))
+                                            (string->path (string-append (path->string package-path) ".CHECKSUM"))
+                                            #:fail-okay? #t)))]))
              (dynamic-wind
                void
                (λ ()
@@ -395,14 +416,13 @@
        (match create:format
          ["tgz"
           (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
-            (delete-directory/files pkg)
+            (delete-file pkg)
             (error 'galaxy "Package creation failed"))]
          ["zip"
           (define orig-pkg (normalize-path pkg))
-          (parameterize
-              ([current-directory dir])
+          (parameterize ([current-directory dir])
             (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
-              (delete-directory/files pkg)
+              (delete-file pkg)
               (error 'galaxy "Package creation failed")))]
          ["plt"
           (pack-plt pkg pkg-name (list dir)
