@@ -146,7 +146,7 @@
                  #:port 9999
                  #:extra-files-paths (list (build-path test-directory "test-pkgs"))))
 
-(require not-meta/galaxy-index/basic/main)
+(require meta/galaxy-index/basic/main)
 (define *index-ht-1* (make-hash))
 (define *index-ht-2* (make-hash))
 (define (start-galaxy-server index-ht port)
@@ -250,7 +250,7 @@
      ;; XXX Deal with checksums in github
      ;; XXX error on remote git ending in /
      (shelly-install "remote/github"
-                     "github://github.com/jeapostrophe/galaxy/master/not-tests/galaxy/test-pkgs/galaxy-test1")
+                     "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1")
      ;; XXX support normal git as well
      ;; XXX throw error for a missing directory
      ;; XXX error (?) on ending /
@@ -560,4 +560,5 @@
      ;; XXX system installation tests
      ;; XXX more config tests (viewing)
      ;; XXX scour github for initial packages
+     ;; XXX make a test case where the updated version of packages adds a conflict so the old version is still used.
      )))))
