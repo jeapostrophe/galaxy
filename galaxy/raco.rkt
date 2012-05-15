@@ -96,7 +96,9 @@
 (define (update-pkg-cfg! key val)
   (write-file-hash! (pkg-config-file) key val))
 
-(struct install-info (name directory clean?))
+(struct install-info (name directory clean? pis?))
+
+(define package-from-index? (make-parameter #f))
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
@@ -211,12 +213,12 @@
              (or given-pkg-name (path->string (file-name-from-path pkg))))
            (cond
              [install:link?
-              (install-info pkg-name pkg #f)]
+              (install-info pkg-name pkg #f #f)]
              [else
               (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
               (make-parent-directory* pkg-dir)
               (copy-directory/files pkg pkg-dir)
-              (install-info pkg-name pkg-dir #t)])]
+              (install-info pkg-name pkg-dir #t (package-from-index?))])]
           [(url-scheme pkg-url)
            =>
            (match-lambda
@@ -297,21 +299,24 @@
                    (delete-directory/files package-path)))])]
           [else
            ;; XXX no error handling or checksums
-           (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
-             (define iu (string->url i))
-             (install-package
-              (hash-ref
-               (call/input-url+200
-                (combine-url/relative
-                 iu
-                 ;; XXX not robust against pkgs with / in name
-                 (format "/pkg/~a" pkg))
-                read)
-               'source)))]))
+           (or
+            (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
+              (define iu (string->url i))
+              (parameterize ([package-from-index? #t])
+                (install-package
+                 (hash-ref
+                  (call/input-url+200
+                   (combine-url/relative
+                    iu
+                    ;; XXX not robust against pkgs with / in name
+                    (format "/pkg/~a" pkg))
+                   read)
+                  'source))))
+            (error 'galaxy "Cannot find package ~a on indexes" pkg))]))
       (define db (read-pkg-db))
       (define (install-package/outer infos pkg info)
         (match-define
-         (install-info pkg-name pkg-dir clean?)
+         (install-info pkg-name pkg-dir clean? pis?)
          info)
         ;; XXX At this point, we shouldn't have created anything in
         ;; the install directory, but right now I do
@@ -337,7 +342,7 @@
            (λ (conflicting-pkg)
              (clean!)
              (error 'galaxy "conflicts with ~e" conflicting-pkg))]
-          [(and 
+          [(and
             (not (eq? dep-behavior 'force))
             (let ()
               (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
@@ -352,7 +357,37 @@
            =>
            (λ (unsatisfied-deps)
              (clean!)
-             (error 'galaxy "missing dependencies: ~e" unsatisfied-deps))]
+             (match 
+                 (or dep-behavior
+                     (if pis?
+                       'search-ask
+                       'fail))
+               ['fail
+                (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+               ['search-auto
+                (printf "The following packages are listed as dependencies, but are not currently installed, so we will automatically install them.\n")
+                (printf "\t")
+                (for ([p (in-list unsatisfied-deps)])
+                  (printf "~a " p))
+                (printf "\n")
+                (raise unsatisfied-deps)]
+               ['search-ask
+                (printf "The following packages are listed as dependencies, but are not currently installed:\n")
+                (printf "\t")
+                (for ([p (in-list unsatisfied-deps)])
+                  (printf "~a " p))
+                (printf "\n")
+                (let loop ()
+                  (printf "Would you like to install them via your package indices? [Yn] ")
+                  (flush-output)
+                  (match (read-line)
+                    [(or "y" "Y" "")
+                     (raise unsatisfied-deps)]
+                    [(or "n" "N")
+                     (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+                    [x
+                     (eprintf "Invalid input: ~e\n" x)
+                     (loop)]))]))]
           [else
            (links pkg-dir
                   #:user? #t
@@ -365,8 +400,13 @@
       (define infos
         (map install-package pkgs))
       (for-each (curry install-package/outer infos) pkgs infos))
-    (install-packages #:dep-behavior install:dep-behavior
-                      pkgs))]
+    (define (install-cmd pkgs)
+      (with-handlers ([list?
+                       (λ (deps)
+                         (install-cmd (append deps pkgs)))])
+        (install-packages #:dep-behavior install:dep-behavior
+                          pkgs)))
+    (install-cmd pkgs))]
  ["update"       "Update packages"
   "Update packages"
   #:args ()
