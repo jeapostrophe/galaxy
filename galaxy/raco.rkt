@@ -14,7 +14,13 @@
          racket/port
          racket/list
          racket/function
+         racket/dict
+         racket/set
          "util.rkt")
+
+(define (file->value* pth def)
+  (with-handlers ([exn:fail? (λ (x) def)])
+    (file->value pth)))
 
 (define (absolute-collects-dir)
   (path->complete-path
@@ -90,7 +96,7 @@
 (define (update-pkg-cfg! key val)
   (write-file-hash! (pkg-config-file) key val))
 
-(struct install-info (name directory))
+(struct install-info (name directory clean?))
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
@@ -136,7 +142,7 @@
            (define checksum-pth (format "~a.CHECKSUM" pkg))
            (unless (or (not (file-exists? checksum-pth))
                        (not install:check-sums?)
-                       (string=? (file->string checksum-pth) 
+                       (string=? (file->string checksum-pth)
                                  (with-input-from-file pkg
                                    (λ ()
                                      (sha1 (current-input-port))))))
@@ -194,23 +200,23 @@
              [x
               (error 'pkg "Invalid package format: ~e" x)])
            (dynamic-wind
-             void
-             (λ ()
-               (install-package pkg-dir
-                                #:pkg-name pkg-name))
-             (λ ()
-               (delete-directory/files pkg-dir)))]
+               void
+               (λ ()
+                 (install-package pkg-dir
+                                  #:pkg-name pkg-name))
+               (λ ()
+                 (delete-directory/files pkg-dir)))]
           [(directory-exists? pkg)
            (define pkg-name
              (or given-pkg-name (path->string (file-name-from-path pkg))))
            (cond
              [install:link?
-              (install-info pkg-name pkg)]
+              (install-info pkg-name pkg #f)]
              [else
               (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
               (make-parent-directory* pkg-dir)
               (copy-directory/files pkg pkg-dir)
-              (install-info pkg-name pkg-dir)])]
+              (install-info pkg-name pkg-dir #t)])]
           [(url-scheme pkg-url)
            =>
            (match-lambda
@@ -232,18 +238,18 @@
 
              ;; XXX curl http://github.com/api/v2/json/repos/show/jeapostrophe/galaxy/branches
              (dynamic-wind
-               void
-               (λ ()
-                 (download-file! new-url tmp.tgz)
-                 (dynamic-wind
-                   void
-                   (λ ()
-                     (untar tmp.tgz tmp-dir #:strip-components 1)
-                     (install-package (path->string package-path)))
-                   (λ ()
-                     (delete-directory/files tmp-dir))))
-               (λ ()
-                 (delete-directory/files tmp.tgz)))]
+                 void
+                 (λ ()
+                   (download-file! new-url tmp.tgz)
+                   (dynamic-wind
+                       void
+                       (λ ()
+                         (untar tmp.tgz tmp-dir #:strip-components 1)
+                         (install-package (path->string package-path)))
+                       (λ ()
+                         (delete-directory/files tmp-dir))))
+                 (λ ()
+                   (delete-directory/files tmp.tgz)))]
             [_
              (define url-last-component
                (path/param-path (last (url-path pkg-url))))
@@ -280,15 +286,15 @@
                                             (string->path (string-append (path->string package-path) ".CHECKSUM"))
                                             #:fail-okay? #t)))]))
              (dynamic-wind
-               void
-               (λ ()
-                 (download-package!)
-                 ;; XXX the checksum/manifest from the site should be
-                 ;; used rather than the normal local default, and the
-                 ;; defaults for local pkgs don't apply.
-                 (install-package package-path))
-               (λ ()
-                 (delete-directory/files package-path)))])]
+                 void
+                 (λ ()
+                   (download-package!)
+                   ;; XXX the checksum/manifest from the site should be
+                   ;; used rather than the normal local default, and the
+                   ;; defaults for local pkgs don't apply.
+                   (install-package package-path))
+                 (λ ()
+                   (delete-directory/files package-path)))])]
           [else
            ;; XXX no error handling or checksums
            (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
@@ -302,38 +308,63 @@
                  (format "/pkg/~a" pkg))
                 read)
                'source)))]))
-      (define (install-package/outer pkg)
+      (define db (read-pkg-db))
+      (define (install-package/outer infos pkg info)
         (match-define
-         (install-info pkg-name pkg-dir)
-         (install-package pkg))
-        ;; XXX At this point, we shouldn't create anything in the
-        ;; install directory, but right now I do
-        ;; XXX delete pkg-dir if i can (or errors)
+         (install-info pkg-name pkg-dir clean?)
+         info)
+        ;; XXX At this point, we shouldn't have created anything in
+        ;; the install directory, but right now I do
+        (define (clean!)
+          (when clean?
+            (delete-directory/files pkg-dir)))
+        (define simultaneous-installs
+          (list->set (map install-info-name infos)))
         (cond
-          [(hash-ref (read-pkg-db) pkg-name #f)
+          [(hash-ref db pkg-name #f)
+           (clean!)
            (error 'galaxy "~e is already installed" pkg-name)]
           [(and
             (not install:force?)
             (for/or ([f (in-list (directory-list* pkg-dir))])
               (or (and (file-exists? (build-path (absolute-collects-dir) f))
-                       "racket")                 
-                  (for/or ([other-pkg (in-hash-keys (read-pkg-db))])
+                       "racket")
+                  (for/or ([other-pkg (in-hash-keys db)])
                     (define p (build-path (pkg-installed-dir) other-pkg f))
                     (and (file-exists? p)
                          other-pkg)))))
            =>
            (λ (conflicting-pkg)
+             (clean!)
              (error 'galaxy "conflicts with ~e" conflicting-pkg))]
+          [(and 
+            (not (eq? dep-behavior 'force))
+            (let ()
+              (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
+              (define deps (dict-ref meta 'dependency empty))
+              (define unsatisfied-deps
+                (filter-not (λ (dep)
+                              (or (set-member? simultaneous-installs dep)
+                                  (hash-has-key? db dep)))
+                            deps))
+              (and (not (empty? unsatisfied-deps))
+                   unsatisfied-deps)))
+           =>
+           (λ (unsatisfied-deps)
+             (clean!)
+             (error 'galaxy "missing dependencies: ~e" unsatisfied-deps))]
           [else
            (links pkg-dir
-               #:user? #t
-               #:root? #t)
+                  #:user? #t
+                  #:root? #t)
            (update-pkg-db! pkg-name
                            ;; XXX pkg should be fully resolved so there
                            ;; aren't relative paths to the original
                            ;; install location
                            (list 'pkg-info pkg install:link?))]))
-      (for-each install-package/outer pkgs))
+      (define infos
+        (map install-package pkgs))
+      (for-each (curry install-package/outer infos) pkgs infos))
     (install-packages #:dep-behavior install:dep-behavior
                       pkgs))]
  ["update"       "Update packages"
