@@ -3,6 +3,7 @@
          planet/private/command
          raco/command-name
          net/url
+         json
          openssl/sha1
          racket/match
          racket/system
@@ -76,6 +77,45 @@
 (define (pkg-installed-dir)
   (build-path (pkg-dir) "installed"))
 
+(define (package-index-lookup pkg)
+  (or
+   (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
+     (call/input-url+200
+      (combine-url/relative
+       (string->url i)
+       ;; XXX not robust against pkgs with / in name
+       (format "/pkg/~a" pkg))
+      read))
+   (error 'galaxy "Cannot find package ~a on indexes" pkg)))
+
+(define (remote-package-checksum pkg)
+  (match pkg
+    [`(pis ,pkg-name)
+     (hash-ref (package-index-lookup pkg-name) 'checksum)]
+    [`(url ,pkg-url-str)
+     (define pkg-url
+       (string->url pkg-url-str))
+     (match (url-scheme pkg-url)
+       ["github"
+        (match-define (list* user repo branch path)
+                      (map path/param-path (url-path pkg-url)))
+        (hash-ref
+         (hash-ref
+          (call/input-url
+           (url "https" #f "github.com" #f #t
+                (map (λ (x) (path/param x empty))
+                     (list "api" "v2" "json" "repos" "show" user repo "branches"))
+                empty
+                #f)
+           get-pure-port
+           read-json)
+          'branches)
+         (string->symbol branch))]
+       [_
+        (call/input-url (string->url (string-append pkg-url-str ".CHECKSUM"))
+                        get-pure-port
+                        port->string)])]))
+
 ;; XXX with-file-lock
 ;; XXX make structs
 (define (read-file-hash file)
@@ -83,9 +123,7 @@
     (with-handlers ([exn? (λ (x) (hash))])
       (file->value file)))
   the-db)
-(define (write-file-hash! file key val)
-  (define new-db
-    (hash-set (read-file-hash file) key val))
+(define (write-file-hash! file new-db)
   (make-parent-directory* file)
   (with-output-to-file file
     #:exists 'replace
@@ -98,7 +136,7 @@
   (define db (read-pkg-db))
   (define pi (hash-ref db pkg-name #f))
   (cond
-    [pi 
+    [pi
      pi]
     [(not fail?)
      #f]
@@ -108,19 +146,31 @@
             (hash-keys db))]))
 
 (define (update-pkg-db! pkg-name info)
-  (write-file-hash! (pkg-db-file) pkg-name info))
+  (write-file-hash! 
+   (pkg-db-file)
+   (hash-set (read-pkg-db) pkg-name info)))
+(define (remove-from-pkg-db! pkg-name)
+  (write-file-hash! 
+   (pkg-db-file)
+   (hash-remove (read-pkg-db) pkg-name)))
 (define (read-pkg-cfg)
   (read-file-hash (pkg-config-file)))
 (define (update-pkg-cfg! key val)
-  (write-file-hash! (pkg-config-file) key val))
+  (write-file-hash! 
+   (pkg-config-file) 
+   (hash-set (read-pkg-cfg) key val)))
 
 ;; XXX remove pis?
-(struct install-info (name orig-pkg directory clean? pis?))
+(struct install-info (name orig-pkg directory clean? pis? checksum))
 
 (define (update-install-info-orig-pkg if op)
   (struct-copy install-info if
                [orig-pkg op]))
+(define (update-install-info-checksum if op)
+  (struct-copy install-info if
+               [checksum op]))
 
+;; XXX remove
 (define package-from-index? (make-parameter #f))
 
 ;; XXX struct based general UI for GUI integration?
@@ -130,6 +180,347 @@
 (define install:check-sums? #t)
 (define create:format "plt")
 (define config:set #t)
+
+(define (remove-package pkg-name)
+  (match-define (list 'pkg-info orig-pkg checksum)
+                (package-info pkg-name))
+  (remove-from-pkg-db! pkg-name)
+  (match orig-pkg
+    [`(link ,orig-pkg-dir)
+     (links orig-pkg-dir
+            #:remove? #t
+            #:user? #t
+            #:root? #t)]
+    [_
+     (define pkg-dir
+       (build-path (pkg-installed-dir) pkg-name))
+     (links pkg-dir
+            #:remove? #t
+            #:user? #t
+            #:root? #t)
+     (delete-directory/files pkg-dir)]))
+
+(define (remove-packages pkgs)
+  (for-each remove-package pkgs))
+
+(define (install-packages #:dep-behavior [dep-behavior #f]
+                          pkgs)
+  (define (install-package pkg
+                           #:pkg-name [given-pkg-name #f])
+    (define pkg-url (and (string? pkg) (string->url pkg)))
+    (cond
+      [(file-exists? pkg)
+       (define checksum-pth (format "~a.CHECKSUM" pkg))
+       (define expected-checksum
+         (and (file-exists? checksum-pth)
+              install:check-sums?
+              (file->string checksum-pth)))
+       (define actual-checksum
+         (with-input-from-file pkg
+           (λ ()
+             (sha1 (current-input-port)))))
+       (unless (or (not expected-checksum)
+                   (string=? expected-checksum actual-checksum))
+         (error 'pkg "Incorrect checksum on package"))
+       (define checksum
+         actual-checksum)
+       (define pkg-format (filename-extension pkg))
+       (define pkg-name
+         (or given-pkg-name
+             (regexp-replace
+              (regexp (format "~a$" (regexp-quote (format ".~a" pkg-format))))
+              (path->string (file-name-from-path pkg))
+              "")))
+       (define pkg-dir (build-path (pkg-temporary-dir) pkg-name))
+       (make-directory* pkg-dir)
+       (match pkg-format
+         [#"tgz"
+          (untar pkg pkg-dir)]
+         [#"zip"
+          (system* (find-executable-path "unzip") "-n" pkg "-d" pkg-dir)]
+         [#"plt"
+          ;; XXX This is to deal with the fact that
+          ;; fold-plt-archive doesn't really give a
+          ;; path-string? to the callback functions. Perhaps a
+          ;; PR should be submitted?
+          (define (path-descriptor->path pd)
+            (if (or (eq? 'same pd)
+                    (path? pd))
+              pd
+              (second pd)))
+          (define (write-file file* content-p)
+            (define file (path-descriptor->path file*))
+            (printf "\twriting ~a\n" file)
+            (with-output-to-file
+                (build-path pkg-dir file)
+              (λ () (copy-port content-p (current-output-port)))))
+          ;; XXX writing this at all was necessary because
+          ;; unpack seems to break on using "." and doesn't
+          ;; allow me to not use the user collection path.
+          (fold-plt-archive pkg
+                            void
+                            void
+                            (λ (dir* _a)
+                              (define dir (path-descriptor->path dir*))
+                              (printf "\tmaking ~a\n" dir)
+                              (unless (equal? (build-path 'same)
+                                              dir)
+                                (make-directory
+                                 (build-path pkg-dir
+                                             dir))))
+                            (case-lambda
+                              [(file content-p _a)
+                               (write-file file content-p)]
+                              [(file content-p _m _a)
+                               (write-file file content-p)])
+                            (void))]
+         [x
+          (error 'pkg "Invalid package format: ~e" x)])
+       (dynamic-wind
+           void
+           (λ ()
+             (update-install-info-checksum
+              (update-install-info-orig-pkg
+               (install-package pkg-dir
+                                #:pkg-name pkg-name)
+               `(file ,(simple-form-path* pkg)))
+              checksum))
+           (λ ()
+             (delete-directory/files pkg-dir)))]
+      [(directory-exists? pkg)
+       (define pkg-name
+         (or given-pkg-name (path->string (file-name-from-path pkg))))
+       (cond
+         [install:link?
+          (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f #f)]
+         [else
+          (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
+          (make-parent-directory* pkg-dir)
+          (copy-directory/files pkg pkg-dir)
+          (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t (package-from-index?) #f)])]
+      [(url-scheme pkg-url)
+       =>
+       (lambda (scheme)
+         (define orig-pkg `(url ,pkg))
+         (define checksum (remote-package-checksum orig-pkg))
+         (define info
+           (update-install-info-orig-pkg
+           (match scheme
+             ["github"
+              (match-define (list* user repo branch path)
+                            (map path/param-path (url-path pkg-url)))
+              (define new-url
+                (url "https" #f "github.com" #f #t
+                     (map (λ (x) (path/param x empty))
+                          (list user repo "tarball" branch))
+                     empty
+                     #f))
+              (define tmp.tgz
+                (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
+              (define tmp-dir
+                (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
+              (define package-path
+                (apply build-path tmp-dir path))
+
+              (dynamic-wind
+                  void
+                  (λ ()
+                    (download-file! new-url tmp.tgz)
+                    (dynamic-wind
+                        void
+                        (λ ()
+                          (untar tmp.tgz tmp-dir #:strip-components 1)
+                          (install-package (path->string package-path)))
+                        (λ ()
+                          (delete-directory/files tmp-dir))))
+                  (λ ()
+                    (delete-directory/files tmp.tgz)))]
+             [_
+              (define url-last-component
+                (path/param-path (last (url-path pkg-url))))
+              (define url-looks-like-directory?
+                (string=? "" url-last-component))
+              (define-values
+                (package-path download-package!)
+                (cond
+                  [url-looks-like-directory?
+                   (define package-path
+                     (build-path (pkg-temporary-dir)
+                                 (path/param-path
+                                  (second (reverse (url-path pkg-url))))))
+                   (define (path-like f)
+                     (build-path package-path f))
+                   (define (url-like f)
+                     (combine-url/relative pkg-url f))
+                   (values package-path
+                           (λ ()
+                             (printf "\tCloning remote directory\n")
+                             (make-directory* package-path)
+                             (define manifest
+                               (call/input-url+200 (url-like "MANIFEST") port->lines))
+                             (for ([f (in-list manifest)])
+                               (download-file! (url-like f) (path-like f)))))]
+                  [else
+                   (define package-path
+                     (build-path (pkg-temporary-dir) url-last-component))
+                   (values package-path
+                           (λ ()
+                             (download-file! pkg-url package-path)))]))
+              (dynamic-wind
+                  void
+                  (λ ()
+                    (download-package!)
+                    ;; XXX the checksum/manifest from the site should be
+                    ;; used rather than the normal local default, and the
+                    ;; defaults for local pkgs don't apply.
+                    (install-package package-path))
+                  (λ ()
+                    (delete-directory/files package-path)))])
+           orig-pkg))
+         (when (and (install-info-checksum info)
+                    install:check-sums?
+                    (not (equal? (install-info-checksum info) checksum)))
+           (error 'galaxy "Incorrect checksum on package: ~e" pkg))
+         (update-install-info-checksum
+          info
+          checksum))]
+      [else
+       (define index-info
+         (package-index-lookup pkg))
+       (update-install-info-orig-pkg
+        (parameterize ([package-from-index? #t])
+          (install-package
+           (hash-ref
+            index-info
+            'source)))
+        `(pis ,pkg))]))
+  (define db (read-pkg-db))
+  (define (install-package/outer infos pkg info)
+    (match-define
+     (install-info pkg-name orig-pkg pkg-dir clean? pis? checksum)
+     info)
+    ;; XXX At this point, we shouldn't have created anything in
+    ;; the install directory, but right now I do
+    (define (clean!)
+      (when clean?
+        (delete-directory/files pkg-dir)))
+    (define simultaneous-installs
+      (list->set (map install-info-name infos)))
+    (cond
+      [(package-info pkg-name #f)
+       (clean!)
+       (error 'galaxy "~e is already installed" pkg-name)]
+      [(and
+        (not install:force?)
+        (for/or ([f (in-list (directory-list* pkg-dir))])
+          (or (and (file-exists? (build-path (absolute-collects-dir) f))
+                   "racket")
+              (for/or ([other-pkg (in-hash-keys db)])
+                (define p (build-path (pkg-installed-dir) other-pkg f))
+                (and (file-exists? p)
+                     other-pkg)))))
+       =>
+       (λ (conflicting-pkg)
+         (clean!)
+         (error 'galaxy "conflicts with ~e" conflicting-pkg))]
+      [(and
+        (not (eq? dep-behavior 'force))
+        (let ()
+          (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
+          (define deps (dict-ref meta 'dependency empty))
+          (define unsatisfied-deps
+            (filter-not (λ (dep)
+                          (or (set-member? simultaneous-installs dep)
+                              (hash-has-key? db dep)))
+                        deps))
+          (and (not (empty? unsatisfied-deps))
+               unsatisfied-deps)))
+       =>
+       (λ (unsatisfied-deps)
+         (clean!)
+         (match
+             (or dep-behavior
+                 (if pis?
+                   'search-ask
+                   'fail))
+           ['fail
+            (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+           ['search-auto
+            (printf "The following packages are listed as dependencies, but are not currently installed, so we will automatically install them.\n")
+            (printf "\t")
+            (for ([p (in-list unsatisfied-deps)])
+              (printf "~a " p))
+            (printf "\n")
+            (raise unsatisfied-deps)]
+           ['search-ask
+            (printf "The following packages are listed as dependencies, but are not currently installed:\n")
+            (printf "\t")
+            (for ([p (in-list unsatisfied-deps)])
+              (printf "~a " p))
+            (printf "\n")
+            (let loop ()
+              (printf "Would you like to install them via your package indices? [Yn] ")
+              (flush-output)
+              (match (read-line)
+                [(or "y" "Y" "")
+                 (raise unsatisfied-deps)]
+                [(or "n" "N")
+                 (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+                [x
+                 (eprintf "Invalid input: ~e\n" x)
+                 (loop)]))]))]
+      [else
+       (dprintf "creating link to ~e" pkg-dir)
+       (links pkg-dir
+              #:user? #t
+              #:root? #t)
+       (define pkg-info
+         (list 'pkg-info orig-pkg checksum))
+       (dprintf "updating db with ~e to ~e" pkg-name pkg-info)
+       (update-pkg-db! pkg-name pkg-info)]))
+  (define infos
+    (map install-package pkgs))
+  (for-each (curry install-package/outer infos) pkgs infos))
+
+(define (install-cmd #:dep-behavior [dep-behavior #f] pkgs)
+  (with-handlers ([list?
+                   (λ (deps)
+                     (install-cmd #:dep-behavior dep-behavior
+                                  (append deps pkgs)))])
+    (install-packages #:dep-behavior dep-behavior
+                      pkgs)))
+
+(define (update-package pkg-name)
+  (match-define (list 'pkg-info orig-pkg checksum)
+                (package-info pkg-name))
+  (match orig-pkg
+    [`(link ,_)
+     (error 'galaxy "Cannot update linked packages (~e is linked to ~e)"
+            pkg-name
+            orig-pkg)]
+    [`(dir ,_)
+     (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local directory.)"
+            pkg-name)]
+    [`(file ,_)
+     (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local file.)"
+            pkg-name)]
+    [`(,_ ,orig-pkg-desc)
+     (define new-checksum
+       (remote-package-checksum orig-pkg))
+     (and new-checksum
+          (not (equal? checksum new-checksum))
+          (cons pkg-name orig-pkg-desc))]))
+
+(define (update-packages pkgs)
+  (define to-update (filter-map update-package pkgs))
+  (cond
+    [(empty? to-update)
+     (printf "No updates available\n")]
+    [else
+     ;; XXX what if the install fails?
+     (for-each (compose remove-package car) to-update)
+     ;; XXX dep-behavior
+     (install-cmd (map cdr to-update))]))
 
 (svn-style-command-line
  #:program (short-program+command-name)
@@ -156,328 +547,16 @@
    "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
    (set! install:link? #t)]
   #:args pkgs
-  (begin
-    (define (install-packages #:dep-behavior dep-behavior
-                              pkgs)
-      (define (install-package pkg
-                               #:pkg-name [given-pkg-name #f])
-        (define pkg-url (and (string? pkg) (string->url pkg)))
-        (cond
-          [(file-exists? pkg)
-           (define checksum-pth (format "~a.CHECKSUM" pkg))
-           (unless (or (not (file-exists? checksum-pth))
-                       (not install:check-sums?)
-                       (string=? (file->string checksum-pth)
-                                 (with-input-from-file pkg
-                                   (λ ()
-                                     (sha1 (current-input-port))))))
-             (error 'pkg "Incorrect checksum on package"))
-           (define pkg-format (filename-extension pkg))
-           (define pkg-name
-             (or given-pkg-name
-                 (regexp-replace
-                  (regexp (format "~a$" (regexp-quote (format ".~a" pkg-format))))
-                  (path->string (file-name-from-path pkg))
-                  "")))
-           (define pkg-dir (build-path (pkg-temporary-dir) pkg-name))
-           (make-directory* pkg-dir)
-           (match pkg-format
-             [#"tgz"
-              (untar pkg pkg-dir)]
-             [#"zip"
-              (system* (find-executable-path "unzip") "-n" pkg "-d" pkg-dir)]
-             [#"plt"
-              ;; XXX This is to deal with the fact that
-              ;; fold-plt-archive doesn't really give a
-              ;; path-string? to the callback functions. Perhaps a
-              ;; PR should be submitted?
-              (define (path-descriptor->path pd)
-                (if (or (eq? 'same pd)
-                        (path? pd))
-                  pd
-                  (second pd)))
-              (define (write-file file* content-p)
-                (define file (path-descriptor->path file*))
-                (printf "\twriting ~a\n" file)
-                (with-output-to-file
-                    (build-path pkg-dir file)
-                  (λ () (copy-port content-p (current-output-port)))))
-              ;; XXX writing this at all was necessary because
-              ;; unpack seems to break on using "." and doesn't
-              ;; allow me to not use the user collection path.
-              (fold-plt-archive pkg
-                                void
-                                void
-                                (λ (dir* _a)
-                                  (define dir (path-descriptor->path dir*))
-                                  (printf "\tmaking ~a\n" dir)
-                                  (unless (equal? (build-path 'same)
-                                                  dir)
-                                    (make-directory
-                                     (build-path pkg-dir
-                                                 dir))))
-                                (case-lambda
-                                  [(file content-p _a)
-                                   (write-file file content-p)]
-                                  [(file content-p _m _a)
-                                   (write-file file content-p)])
-                                (void))]
-             [x
-              (error 'pkg "Invalid package format: ~e" x)])
-           (dynamic-wind
-               void
-               (λ ()
-                 (update-install-info-orig-pkg
-                  (install-package pkg-dir
-                                   #:pkg-name pkg-name)
-                  `(file ,(simple-form-path* pkg))))
-               (λ ()
-                 (delete-directory/files pkg-dir)))]
-          [(directory-exists? pkg)
-           (define pkg-name
-             (or given-pkg-name (path->string (file-name-from-path pkg))))
-           (cond
-             [install:link?
-              (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg #f #f)]
-             [else
-              (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
-              (make-parent-directory* pkg-dir)
-              (copy-directory/files pkg pkg-dir)
-              (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t (package-from-index?))])]
-          [(url-scheme pkg-url)
-           =>
-           (lambda (scheme)
-             (update-install-info-orig-pkg
-              (match scheme
-                ["github"
-                 (match-define (list* user repo branch path)
-                               (map path/param-path (url-path pkg-url)))
-                 (define new-url
-                   (url "https" #f "github.com" #f #t
-                        (map (λ (x) (path/param x empty))
-                             (list user repo "tarball" branch))
-                        empty
-                        #f))
-                 (define tmp.tgz
-                   (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
-                 (define tmp-dir
-                   (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
-                 (define package-path
-                   (apply build-path tmp-dir path))
-
-                 ;; XXX curl http://github.com/api/v2/json/repos/show/jeapostrophe/galaxy/branches
-                 (dynamic-wind
-                     void
-                     (λ ()
-                       (download-file! new-url tmp.tgz)
-                       (dynamic-wind
-                           void
-                           (λ ()
-                             (untar tmp.tgz tmp-dir #:strip-components 1)
-                             (install-package (path->string package-path)))
-                           (λ ()
-                             (delete-directory/files tmp-dir))))
-                     (λ ()
-                       (delete-directory/files tmp.tgz)))]
-                [_
-                 (define url-last-component
-                   (path/param-path (last (url-path pkg-url))))
-                 (define url-looks-like-directory?
-                   (string=? "" url-last-component))
-                 (define-values
-                   (package-path download-package!)
-                   (cond
-                     [url-looks-like-directory?
-                      (define package-path
-                        (build-path (pkg-temporary-dir)
-                                    (path/param-path
-                                     (second (reverse (url-path pkg-url))))))
-                      (define (path-like f)
-                        (build-path package-path f))
-                      (define (url-like f)
-                        (combine-url/relative pkg-url f))
-                      (values package-path
-                              (λ ()
-                                (printf "\tCloning remote directory\n")
-                                (make-directory* package-path)
-                                (define manifest
-                                  (call/input-url+200 (url-like "MANIFEST") port->lines))
-                                (for ([f (in-list manifest)])
-                                  (download-file! (url-like f) (path-like f)))))]
-                     [else
-                      (define package-path
-                        (build-path (pkg-temporary-dir) url-last-component))
-                      ;; XXX include checksum in list to delete it?
-                      (values package-path
-                              (λ ()
-                                (download-file! pkg-url package-path)
-                                (download-file! (string->url (string-append (url->string pkg-url) ".CHECKSUM"))
-                                                (string->path (string-append (path->string package-path) ".CHECKSUM"))
-                                                #:fail-okay? #t)))]))
-                 (dynamic-wind
-                     void
-                     (λ ()
-                       (download-package!)
-                       ;; XXX the checksum/manifest from the site should be
-                       ;; used rather than the normal local default, and the
-                       ;; defaults for local pkgs don't apply.
-                       (install-package package-path))
-                     (λ ()
-                       (delete-directory/files package-path)))])
-              `(url ,pkg)))]
-          [else
-           ;; XXX no error handling or checksums
-           (update-install-info-orig-pkg
-            (or
-             (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
-               (define iu (string->url i))
-               (parameterize ([package-from-index? #t])
-                 (install-package
-                  (hash-ref
-                   (call/input-url+200
-                    (combine-url/relative
-                     iu
-                     ;; XXX not robust against pkgs with / in name
-                     (format "/pkg/~a" pkg))
-                    read)
-                   'source))))
-             (error 'galaxy "Cannot find package ~a on indexes" pkg))
-            `(pis ,pkg))]))
-      (define db (read-pkg-db))
-      (define (install-package/outer infos pkg info)
-        (match-define
-         (install-info pkg-name orig-pkg pkg-dir clean? pis?)
-         info)
-        ;; XXX At this point, we shouldn't have created anything in
-        ;; the install directory, but right now I do
-        (define (clean!)
-          (when clean?
-            (delete-directory/files pkg-dir)))
-        (define simultaneous-installs
-          (list->set (map install-info-name infos)))
-        (cond
-          [(package-info pkg-name #f)
-           (clean!)
-           (error 'galaxy "~e is already installed" pkg-name)]
-          [(and
-            (not install:force?)
-            (for/or ([f (in-list (directory-list* pkg-dir))])
-              (or (and (file-exists? (build-path (absolute-collects-dir) f))
-                       "racket")
-                  (for/or ([other-pkg (in-hash-keys db)])
-                    (define p (build-path (pkg-installed-dir) other-pkg f))
-                    (and (file-exists? p)
-                         other-pkg)))))
-           =>
-           (λ (conflicting-pkg)
-             (clean!)
-             (error 'galaxy "conflicts with ~e" conflicting-pkg))]
-          [(and
-            (not (eq? dep-behavior 'force))
-            (let ()
-              (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
-              (define deps (dict-ref meta 'dependency empty))
-              (define unsatisfied-deps
-                (filter-not (λ (dep)
-                              (or (set-member? simultaneous-installs dep)
-                                  (hash-has-key? db dep)))
-                            deps))
-              (and (not (empty? unsatisfied-deps))
-                   unsatisfied-deps)))
-           =>
-           (λ (unsatisfied-deps)
-             (clean!)
-             (match
-                 (or dep-behavior
-                     (if pis?
-                       'search-ask
-                       'fail))
-               ['fail
-                (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
-               ['search-auto
-                (printf "The following packages are listed as dependencies, but are not currently installed, so we will automatically install them.\n")
-                (printf "\t")
-                (for ([p (in-list unsatisfied-deps)])
-                  (printf "~a " p))
-                (printf "\n")
-                (raise unsatisfied-deps)]
-               ['search-ask
-                (printf "The following packages are listed as dependencies, but are not currently installed:\n")
-                (printf "\t")
-                (for ([p (in-list unsatisfied-deps)])
-                  (printf "~a " p))
-                (printf "\n")
-                (let loop ()
-                  (printf "Would you like to install them via your package indices? [Yn] ")
-                  (flush-output)
-                  (match (read-line)
-                    [(or "y" "Y" "")
-                     (raise unsatisfied-deps)]
-                    [(or "n" "N")
-                     (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
-                    [x
-                     (eprintf "Invalid input: ~e\n" x)
-                     (loop)]))]))]
-          [else
-           (dprintf "creating link to ~e" pkg-dir)
-           (links pkg-dir
-                  #:user? #t
-                  #:root? #t)
-           (define pkg-info 
-             (list 'pkg-info orig-pkg install:link?))
-           (dprintf "updating db with ~e to ~e" pkg-name pkg-info)
-           (update-pkg-db! pkg-name pkg-info)]))
-      (define infos
-        (map install-package pkgs))
-      (for-each (curry install-package/outer infos) pkgs infos))
-    (define (install-cmd pkgs)
-      (with-handlers ([list?
-                       (λ (deps)
-                         (install-cmd (append deps pkgs)))])
-        (install-packages #:dep-behavior install:dep-behavior
-                          pkgs)))
-    (install-cmd pkgs))]
+  (install-cmd #:dep-behavior install:dep-behavior pkgs)]
  ["update"       "Update packages"
   "Update packages"
   #:args pkgs
-  (begin
-    (define (update-package pkg-name)
-      (match-define (list 'pkg-info orig-pkg install:link?)
-                    (package-info pkg-name))
-      (match orig-pkg
-        [`(dir ,_)
-         (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local directory.)"
-                pkg-name)]
-        [`(file ,_)
-         (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local file.)"
-                pkg-name)]
-        [_
-         (error 'galaxy "Unknown installation source for ~e"
-                pkg-name)]))
-    (for-each update-package pkgs))]
+  (update-packages pkgs)]
  ["remove"       "Remove packages"
   "Remove packages"
   #:args pkgs
-  (begin
-    (define (remove-package pkg-name)
-      (match-define (list 'pkg-info orig-pkg install:link?)
-                    (package-info pkg-name))
-      (cond
-        [install:link?
-         (match-define `(dir ,orig-pkg-dir) orig-pkg)
-         (links orig-pkg-dir
-                #:remove? #t
-                #:user? #t
-                #:root? #t)]
-        [else
-         (define pkg-dir
-           (build-path (pkg-installed-dir) pkg-name))
-         (links pkg-dir
-                #:remove? #t
-                #:user? #t
-                #:root? #t)
-         (delete-directory/files pkg-dir)]))
-    (for-each remove-package pkgs))]
+  ;; XXX remove from the db
+  (remove-packages pkgs)]
  ["export"       "Export a package or distribution"
   "Export a package or distribution"
   #:args ()
@@ -511,8 +590,7 @@
   #:args (maybe-dir)
   (begin
     (define dir (regexp-replace* #rx"/$" maybe-dir ""))
-    (match
-        create:format
+    (match create:format
       ["MANIFEST"
        (with-output-to-file
            (build-path dir "MANIFEST")
