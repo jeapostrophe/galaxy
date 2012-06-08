@@ -1,0 +1,7 @@
+MANIFEST
+galaxy-test1/compiled/conflict_rkt.dep
+galaxy-test1/compiled/conflict_rkt.zo
+galaxy-test1/compiled/main_rkt.dep
+galaxy-test1/compiled/main_rkt.zo
+galaxy-test1/conflict.rkt
+galaxy-test1/main.rkt

@@ -181,19 +181,27 @@
 (define create:format "plt")
 (define config:set #t)
 
+(define (package-directory pkg-name)
+  (match-define (list 'pkg-info orig-pkg checksum)
+                (package-info pkg-name))
+  (match orig-pkg
+    [`(link ,orig-pkg-dir)
+     orig-pkg-dir]
+    [_
+     (build-path (pkg-installed-dir) pkg-name)]))
+
 (define (remove-package pkg-name)
   (match-define (list 'pkg-info orig-pkg checksum)
                 (package-info pkg-name))
+  (define pkg-dir (package-directory pkg-name))
   (remove-from-pkg-db! pkg-name)
   (match orig-pkg
-    [`(link ,orig-pkg-dir)
-     (links orig-pkg-dir
+    [`(link ,_)
+     (links pkg-dir
             #:remove? #t
             #:user? #t
             #:root? #t)]
     [_
-     (define pkg-dir
-       (build-path (pkg-installed-dir) pkg-name))
      (links pkg-dir
             #:remove? #t
             #:user? #t
@@ -490,6 +498,12 @@
     (install-packages #:dep-behavior dep-behavior
                       pkgs)))
 
+(define (update-is-possible? pkg-name)
+  (match-define (list 'pkg-info orig-pkg checksum)
+                (package-info pkg-name))
+  (define ty (first orig-pkg))
+  (not (member ty '(link dir file))))
+
 (define (update-package pkg-name)
   (match-define (list 'pkg-info orig-pkg checksum)
                 (package-info pkg-name))
@@ -511,7 +525,20 @@
           (not (equal? checksum new-checksum))
           (cons pkg-name orig-pkg-desc))]))
 
-(define (update-packages pkgs)
+(define (update-packages in-pkgs #:deps? [deps? #f])
+  (define pkgs
+    (cond
+      [(empty? in-pkgs)
+       (filter update-is-possible? (hash-keys (read-pkg-db)))]
+      [deps?
+       (append-map
+        (λ (pkg-name)
+          (define pkg-dir (package-directory pkg-name))
+          (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
+          (dict-ref meta 'dependency empty))
+        in-pkgs)]
+      [else
+       in-pkgs]))
   (define to-update (filter-map update-package pkgs))
   (cond
     [(empty? to-update)
@@ -521,6 +548,8 @@
      (for-each (compose remove-package car) to-update)
      ;; XXX dep-behavior
      (install-cmd (map cdr to-update))]))
+
+(define update:deps? #f)
 
 (svn-style-command-line
  #:program (short-program+command-name)
@@ -550,8 +579,11 @@
   (install-cmd #:dep-behavior install:dep-behavior pkgs)]
  ["update"       "Update packages"
   "Update packages"
+  #:once-each
+  ["--deps" "Check named packages' dependencies for updates"
+   (set! update:deps? #t)]
   #:args pkgs
-  (update-packages pkgs)]
+  (update-packages pkgs #:deps? update:deps?)]
  ["remove"       "Remove packages"
   "Remove packages"
   #:args pkgs
@@ -590,6 +622,8 @@
   #:args (maybe-dir)
   (begin
     (define dir (regexp-replace* #rx"/$" maybe-dir ""))
+    (unless (directory-exists? dir)
+      (error 'galaxy "directory does not exist: ~e" dir))
     (match create:format
       ["MANIFEST"
        (with-output-to-file
