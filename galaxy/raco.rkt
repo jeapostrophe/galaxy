@@ -209,21 +209,22 @@
      (delete-directory/files pkg-dir)]))
 
 (define (remove-packages pkgs)
-  (define db (read-pkg-db))
-  (define pkgs-set (list->set pkgs))
-  (define remaining-pkg-db-set
-    (set-subtract (list->set (hash-keys db))
-                  pkgs-set))
-  (define deps-to-be-removed
-    (set-intersect 
-   pkgs-set
-   (list->set
-    (append-map package-dependencies
-                (set->list
-                 remaining-pkg-db-set)))))
-  (unless (set-empty? deps-to-be-removed)
-    (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e" 
-           (set->list deps-to-be-removed)))
+  (unless remove:force?
+    (define db (read-pkg-db))
+    (define pkgs-set (list->set pkgs))
+    (define remaining-pkg-db-set
+      (set-subtract (list->set (hash-keys db))
+                    pkgs-set))
+    (define deps-to-be-removed
+      (set-intersect 
+       pkgs-set
+       (list->set
+        (append-map package-dependencies
+                    (set->list
+                     remaining-pkg-db-set)))))
+    (unless (set-empty? deps-to-be-removed)
+      (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e" 
+             (set->list deps-to-be-removed))))
   (for-each remove-package pkgs))
 
 (define (install-packages #:dep-behavior [dep-behavior #f]
@@ -567,6 +568,7 @@
      (install-cmd (map cdr to-update))]))
 
 (define update:deps? #f)
+(define remove:force? #f)
 
 (svn-style-command-line
  #:program (short-program+command-name)
@@ -603,6 +605,9 @@
   (update-packages pkgs #:deps? update:deps?)]
  ["remove"       "Remove packages"
   "Remove packages"
+  #:once-each
+  ["--force" "Force removal of packages"
+   (set! remove:force? #t)]
   #:args pkgs
   (remove-packages pkgs)]
  ["export"       "Export a package or distribution"
