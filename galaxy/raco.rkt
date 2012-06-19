@@ -209,6 +209,21 @@
      (delete-directory/files pkg-dir)]))
 
 (define (remove-packages pkgs)
+  (define db (read-pkg-db))
+  (define pkgs-set (list->set pkgs))
+  (define remaining-pkg-db-set
+    (set-subtract (list->set (hash-keys db))
+                  pkgs-set))
+  (define deps-to-be-removed
+    (set-intersect 
+   pkgs-set
+   (list->set
+    (append-map package-dependencies
+                (set->list
+                 remaining-pkg-db-set)))))
+  (unless (set-empty? deps-to-be-removed)
+    (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e" 
+           (set->list deps-to-be-removed)))
   (for-each remove-package pkgs))
 
 (define (install-packages #:dep-behavior [dep-behavior #f]
@@ -525,6 +540,11 @@
           (not (equal? checksum new-checksum))
           (cons pkg-name orig-pkg-desc))]))
 
+(define (package-dependencies pkg-name)
+  (define pkg-dir (package-directory pkg-name))
+  (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
+  (dict-ref meta 'dependency empty))
+
 (define (update-packages in-pkgs #:deps? [deps? #f])
   (define pkgs
     (cond
@@ -532,10 +552,7 @@
        (filter update-is-possible? (hash-keys (read-pkg-db)))]
       [deps?
        (append-map
-        (λ (pkg-name)
-          (define pkg-dir (package-directory pkg-name))
-          (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
-          (dict-ref meta 'dependency empty))
+        package-dependencies
         in-pkgs)]
       [else
        in-pkgs]))
@@ -587,7 +604,6 @@
  ["remove"       "Remove packages"
   "Remove packages"
   #:args pkgs
-  ;; XXX remove from the db
   (remove-packages pkgs)]
  ["export"       "Export a package or distribution"
   "Export a package or distribution"
