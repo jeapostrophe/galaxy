@@ -232,6 +232,8 @@
       (shelly-create "galaxy-test1" "plt")
       (shelly-create "racket-conflict" "tgz")
 
+      $ "raco pkg create --format txt test-pkgs/galaxy-test1" =exit> 1
+
       (shelly-create "galaxy-test2" "zip")
 
       (shelly-case
@@ -283,20 +285,38 @@
       (shelly-install "local package (tgz)" "test-pkgs/galaxy-test1.tgz")
       (shelly-install "local package (zip)" "test-pkgs/galaxy-test1.zip")
       (shelly-install "local package (plt)" "test-pkgs/galaxy-test1.plt")
+
+      (shelly-case
+       "invalid package format is an error"
+       $ "raco pkg install test-pkgs/galaxy-test1.zip.CHECKSUM" =exit> 1)
+
       (shelly-install "remote/URL/http package (file, tgz)"
                       "http://localhost:9999/galaxy-test1.tgz")
       (shelly-install "remote/URL/http package (directory)"
                       "http://localhost:9999/galaxy-test1/")
-      ;; XXX Fail on unsupported package formats
-      ;; XXX Fail on missing MANIFESTs
+
+      (shelly-case
+       "remote/URL/http directory, non-existant file"
+       $ "raco pkg install http://localhost:9999/galaxy-test1.rar" =exit> 1)
+      (shelly-case
+       "remote/URL/http directory, no manifest fail"
+       $ "raco pkg install http://localhost:9999/galaxy-test1/galaxy-test1" =exit> 1)
+
       ;; XXX Fail on MANIFESTs that contain .. files
-      ;; XXX error on remote git ending in /
+
       (shelly-install "remote/github"
                       "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1")
+      (shelly-install "remote/github with slash"
+                      "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1/")
+
       ;; XXX support normal git as well
-      ;; XXX throw error for a missing directory
-      ;; XXX error (?) on ending /
+
+      (shelly-case
+       "local directory fails when not there (because interpreted as package name that isn't there)"
+       $ "raco pkg install test-pkgs/galaxy-test1-not-there" =exit> 1)
+
       (shelly-install "local package (directory)" "test-pkgs/galaxy-test1")
+      (shelly-install "local package (directory with slash)" "test-pkgs/galaxy-test1/")
 
       (with-fake-root
        (shelly-case
