@@ -99,18 +99,18 @@
        ["github"
         (match-define (list* user repo branch path)
                       (map path/param-path (url-path pkg-url)))
-        (hash-ref
-         (hash-ref
+        (define branches
           (call/input-url
-           (url "https" #f "github.com" #f #t
+           (url "https" #f "api.github.com" #f #t
                 (map (λ (x) (path/param x empty))
-                     (list "api" "v2" "json" "repos" "show" user repo "branches"))
+                     (list "repos" user repo "branches"))
                 empty
                 #f)
            get-pure-port
-           read-json)
-          'branches)
-         (string->symbol branch))]
+           read-json))
+        (for/or ([b (in-list branches)])
+          (and (equal? (hash-ref b 'name) (string->symbol branch))
+               (hash-ref (hash-ref b 'commit) 'sha)))]
        [_
         (call/input-url (string->url (string-append pkg-url-str ".CHECKSUM"))
                         get-pure-port
