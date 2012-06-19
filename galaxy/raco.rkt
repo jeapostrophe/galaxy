@@ -160,6 +160,7 @@
    (pkg-config-file) 
    (hash-set (read-pkg-cfg) key val)))
 
+(struct pkg-info (orig-pkg checksum auto?) #:prefab)
 ;; XXX remove pis?
 (struct install-info (name orig-pkg directory clean? pis? checksum))
 
@@ -182,7 +183,7 @@
 (define config:set #t)
 
 (define (package-directory pkg-name)
-  (match-define (list 'pkg-info orig-pkg checksum)
+  (match-define (pkg-info orig-pkg checksum _)
                 (package-info pkg-name))
   (match orig-pkg
     [`(link ,orig-pkg-dir)
@@ -191,7 +192,7 @@
      (build-path (pkg-installed-dir) pkg-name)]))
 
 (define (remove-package pkg-name)
-  (match-define (list 'pkg-info orig-pkg checksum)
+  (match-define (pkg-info orig-pkg checksum _)
                 (package-info pkg-name))
   (define pkg-dir (package-directory pkg-name))
   (remove-from-pkg-db! pkg-name)
@@ -208,12 +209,25 @@
             #:root? #t)
      (delete-directory/files pkg-dir)]))
 
-(define (remove-packages pkgs)
-  (unless remove:force?
-    (define db (read-pkg-db))
+(define (remove-packages in-pkgs)
+  (define db (read-pkg-db))
+  (define all-pkgs
+    (hash-keys db))
+  (define all-pkgs-set
+    (list->set all-pkgs))
+  (define pkgs
+    (if remove:auto?
+      (set->list
+       (set-subtract
+        all-pkgs-set
+        (list->set
+         (append-map package-dependencies
+                     all-pkgs))))
+      in-pkgs))
+  (unless remove:force?    
     (define pkgs-set (list->set pkgs))
     (define remaining-pkg-db-set
-      (set-subtract (list->set (hash-keys db))
+      (set-subtract all-pkgs-set
                     pkgs-set))
     (define deps-to-be-removed
       (set-intersect 
@@ -228,7 +242,7 @@
   (for-each remove-package pkgs))
 
 (define (install-packages #:dep-behavior [dep-behavior #f]
-                          pkgs)
+                          auto+pkgs)
   (define (install-package pkg
                            #:pkg-name [given-pkg-name #f])
     (define pkg-url (and (string? pkg) (string->url pkg)))
@@ -419,7 +433,9 @@
             'source)))
         `(pis ,pkg))]))
   (define db (read-pkg-db))
-  (define (install-package/outer infos pkg info)
+  (define (install-package/outer infos auto+pkg info)
+    (match-define (cons auto? pkg)
+                  auto+pkg)
     (match-define
      (install-info pkg-name orig-pkg pkg-dir clean? pis? checksum)
      info)
@@ -498,30 +514,30 @@
        (links pkg-dir
               #:user? #t
               #:root? #t)
-       (define pkg-info
-         (list 'pkg-info orig-pkg checksum))
-       (dprintf "updating db with ~e to ~e" pkg-name pkg-info)
-       (update-pkg-db! pkg-name pkg-info)]))
+       (define this-pkg-info
+         (pkg-info orig-pkg checksum auto?))
+       (dprintf "updating db with ~e to ~e" pkg-name this-pkg-info)
+       (update-pkg-db! pkg-name this-pkg-info)]))
   (define infos
-    (map install-package pkgs))
-  (for-each (curry install-package/outer infos) pkgs infos))
+    (map install-package (map cdr auto+pkgs)))
+  (for-each (curry install-package/outer infos) auto+pkgs infos))
 
 (define (install-cmd #:dep-behavior [dep-behavior #f] pkgs)
   (with-handlers ([list?
                    (λ (deps)
                      (install-cmd #:dep-behavior dep-behavior
-                                  (append deps pkgs)))])
+                                  (append (map (curry cons #t) deps) pkgs)))])
     (install-packages #:dep-behavior dep-behavior
                       pkgs)))
 
 (define (update-is-possible? pkg-name)
-  (match-define (list 'pkg-info orig-pkg checksum)
+  (match-define (pkg-info orig-pkg checksum _)
                 (package-info pkg-name))
   (define ty (first orig-pkg))
   (not (member ty '(link dir file))))
 
 (define (update-package pkg-name)
-  (match-define (list 'pkg-info orig-pkg checksum)
+  (match-define (pkg-info orig-pkg checksum _)
                 (package-info pkg-name))
   (match orig-pkg
     [`(link ,_)
@@ -565,10 +581,12 @@
      ;; XXX what if the install fails?
      (for-each (compose remove-package car) to-update)
      ;; XXX dep-behavior
-     (install-cmd (map cdr to-update))]))
+     ;; XXX preserve auto-ness
+     (install-cmd (map (curry cons #f) (map cdr to-update)))]))
 
 (define update:deps? #f)
 (define remove:force? #f)
+(define remove:auto? #f)
 
 (svn-style-command-line
  #:program (short-program+command-name)
@@ -595,7 +613,8 @@
    "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
    (set! install:link? #t)]
   #:args pkgs
-  (install-cmd #:dep-behavior install:dep-behavior pkgs)]
+  (install-cmd #:dep-behavior install:dep-behavior
+               (map (curry cons #f) pkgs))]
  ["update"       "Update packages"
   "Update packages"
   #:once-each
@@ -608,6 +627,8 @@
   #:once-each
   ["--force" "Force removal of packages"
    (set! remove:force? #t)]
+  ["--auto" "Remove automatically installed packages with no dependencies"
+   (set! remove:auto? #t)]
   #:args pkgs
   (remove-packages pkgs)]
  ["export"       "Export a package or distribution"

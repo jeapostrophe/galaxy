@@ -633,6 +633,7 @@
        (with-fake-root
         (shelly-case
          "autoremove"
+         $ "raco pkg config --set indexes http://localhost:9990"
          $ "racket -e '(require galaxy-test1)'" =exit> 1
          $ "racket -e '(require galaxy-test2)'" =exit> 1
          $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
