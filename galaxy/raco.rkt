@@ -659,7 +659,7 @@
     "Options are: tgz, zip, plt")
    (set! create:format format)]
   ["--manifest"
-   "Creates a manifest file for a directory, rather than a directory"
+   "Creates a manifest file for a directory, rather than an archive"
    (set! create:format "MANIFEST")]
   #:args (maybe-dir)
   (begin
