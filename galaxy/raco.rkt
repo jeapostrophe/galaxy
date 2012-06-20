@@ -33,6 +33,18 @@
       rest]
      [_ rp])))
 
+(define (path->bytes* pkg)
+  (cond 
+    [(path? pkg)
+     (path->bytes pkg)]
+    [(string? pkg)
+     (path->bytes (string->path pkg))]
+    [(bytes? pkg)
+     pkg]))
+
+(define (directory-path-no-slash pkg)
+  (bytes->path (regexp-replace* #rx#"/$" (path->bytes* pkg) #"")))
+
 (define (absolute-collects-dir)
   (path->complete-path
    (find-system-path 'collects-dir)
@@ -335,16 +347,17 @@
            (λ ()
              (delete-directory/files pkg-dir)))]
       [(directory-exists? pkg)
-       (define pkg-name
-         (or given-pkg-name (path->string (file-name-from-path pkg))))
-       (cond
-         [install:link?
-          (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f #f)]
-         [else
-          (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
-          (make-parent-directory* pkg-dir)
-          (copy-directory/files pkg pkg-dir)
-          (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t (package-from-index?) #f)])]
+       (let ([pkg (directory-path-no-slash pkg)])
+         (define pkg-name
+           (or given-pkg-name (path->string (file-name-from-path pkg))))
+         (cond
+           [install:link?
+            (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f #f)]
+           [else
+            (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
+            (make-parent-directory* pkg-dir)
+            (copy-directory/files pkg pkg-dir)
+            (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t (package-from-index?) #f)]))]
       [(url-scheme pkg-url)
        =>
        (lambda (scheme)
