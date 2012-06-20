@@ -24,6 +24,15 @@
   (with-handlers ([exn:fail? (λ (x) def)])
     (file->value pth)))
 
+(define (url-path/no-slash url)
+  (define p (url-path url))
+  (define rp (reverse p))
+  (reverse
+   (match rp
+     [(list* (path/param "" _) rest)
+      rest]
+     [_ rp])))
+
 (define (absolute-collects-dir)
   (path->complete-path
    (find-system-path 'collects-dir)
@@ -98,7 +107,7 @@
      (match (url-scheme pkg-url)
        ["github"
         (match-define (list* user repo branch path)
-                      (map path/param-path (url-path pkg-url)))
+                      (map path/param-path (url-path/no-slash pkg-url)))
         (define branches
           (call/input-url
            (url "https" #f "api.github.com" #f #t
@@ -346,7 +355,7 @@
            (match scheme
              ["github"
               (match-define (list* user repo branch path)
-                            (map path/param-path (url-path pkg-url)))
+                            (map path/param-path (url-path/no-slash pkg-url)))
               (define new-url
                 (url "https" #f "github.com" #f #t
                      (map (λ (x) (path/param x empty))
