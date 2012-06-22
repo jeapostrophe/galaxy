@@ -175,7 +175,10 @@
 (define *index-ht-2* (make-hash))
 (define (start-galaxy-server index-ht port)
   (serve/servlet (galaxy-index/basic
-                  (λ (pkg-name) (hash-ref index-ht pkg-name)))
+                  (λ (pkg-name) 
+                    (define r (hash-ref index-ht pkg-name #f))
+                    (printf "[>server ~a] ~a = ~a\n" port pkg-name r)
+                    r))
                  #:command-line? #t
                  #:servlet-regexp #rx""
                  #:port port))
@@ -202,7 +205,6 @@
       $ "raco pkg install -h"
       $ "raco pkg update -h"
       $ "raco pkg remove -h"
-      $ "raco pkg export -h"
       $ "raco pkg show -h"
       $ "raco pkg create -h"
       $ "raco pkg config -h")
@@ -262,6 +264,11 @@
                         (file->string "test-pkgs/galaxy-test2.zip.CHECKSUM")
                         'source
                         "http://localhost:9999/galaxy-test2.zip"))
+     (hash-set! *index-ht-2* "galaxy-test2-snd"
+                (hasheq 'checksum
+                        (file->string "test-pkgs/galaxy-test2.zip.CHECKSUM")
+                        'source
+                        "http://localhost:9999/galaxy-test2.zip"))
 
      (define-syntax-rule (shelly-install** message pkg rm-pkg (pre ...) (more ...))
        (with-fake-root
@@ -302,15 +309,14 @@
       (shelly-case
        "remote/URL/http directory, no manifest fail"
        $ "raco pkg install http://localhost:9999/galaxy-test1/galaxy-test1" =exit> 1)
-
-      ;; XXX Fail on MANIFESTs that contain .. files
+      (shelly-case
+       "remote/URL/http directory, bad manifest"
+       $ "raco pkg install http://localhost:9999/galaxy-test1-manifest-error" =exit> 1)
 
       (shelly-install "remote/github"
                       "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1")
       (shelly-install "remote/github with slash"
                       "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1/")
-
-      ;; XXX support normal git as well
 
       (shelly-case
        "local directory fails when not there (because interpreted as package name that isn't there)"
@@ -337,8 +343,12 @@
          (finally
           $ "rm -r test-pkgs/galaxy-test1-linking"))))
 
-      ;; XXX list of package indexes (not just default)
-      ;; XXX make sure it fails when a package doesn't exist on the server
+      (with-fake-root
+       (shelly-case
+        "remote/name package, doesn't work when no package there"
+        $ "raco pkg config --set indexes http://localhost:9990"
+        $ "raco pkg install galaxy-test1-not-there" =exit> 1))
+      
       (with-fake-root
        (shelly-case
         "remote/name package"
@@ -348,8 +358,17 @@
         $ "racket -e '(require galaxy-test1)'"
         $ "raco pkg remove galaxy-test1"
         $ "racket -e '(require galaxy-test1)'" =exit> 1))
-      ;; XXX make sure it can't read arbitrary files
-      ;; XXX test with the official server
+
+      (with-fake-root
+       (shelly-case
+        "remote/name package (multi)"
+        $ "raco pkg config --set indexes http://localhost:9990 http://localhost:9991"
+        $ "racket -e '(require galaxy-test1)'" =exit> 1
+        $ "raco pkg install --deps search-auto galaxy-test2-snd"
+        $ "racket -e '(require galaxy-test1)'"
+        $ "racket -e '(require galaxy-test2)'"
+        $ "raco pkg remove galaxy-test2-snd galaxy-test1"
+        $ "racket -e '(require galaxy-test1)'" =exit> 1))
 
       (shelly-case
        "conflicts"
@@ -467,9 +486,6 @@
          $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
          $ "raco pkg remove galaxy-test2"
          $ "racket -e '(require galaxy-test2)'" =exit> 1))
-
-       ;; XXX test case to ensure that all dependencies are asked about
-       ;; simultaneosly
 
        (with-fake-root
         (shelly-case
@@ -590,7 +606,6 @@
         ($ "raco pkg config --set indexes http://localhost:9990")
         ($ "raco pkg update galaxy-test1" =exit> 0 =stdout> "No updates available\n"
            $ "racket -e '(require galaxy-test1/update)'" =exit> 42
-           ;; XXX force the indexer to check the other end's checksum
            $ "cp test-pkgs/galaxy-test1-v2.zip test-pkgs/galaxy-test1.zip"
            $ "cp test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/galaxy-test1.zip.CHECKSUM"
            (index-ht1-galaxy-test1)
@@ -609,6 +624,9 @@
      ;; XXX update should deal with new deps correctly [* meaning
      ;; should leave the old version in place if they are not
      ;; available]
+
+     ;; XXX if you update a dependency, it should still be considered
+     ;; a dependency after the fact
 
      (shelly-case
       "remove"
@@ -658,14 +676,14 @@
         $ "racket -e '(require galaxy-test1)'" =exit> 1
         $ "racket -e '(require galaxy-test2)'" =exit> 1)))
 
+     ;; XXX wrong checksum on pis package
      ;; XXX packages that aren't roots
      ;; XXX lock the installation directory
      ;; XXX cause raco setup to run on the new roots afterwards
-     ;; XXX export (may export a package and compare the directory's contents)
-     ;; XXX export distribution (no clue)
      ;; XXX show (list installed, mark the ones that are deps, show checksum and/or location on disk)
      ;; XXX planet compatibility server
      ;; XXX system installation tests
      ;; XXX more config tests (viewing)
      ;; XXX scour github for initial packages
+     ;; XXX packages can't contain /
      ))))

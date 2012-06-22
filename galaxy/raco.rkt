@@ -104,7 +104,6 @@
      (call/input-url+200
       (combine-url/relative
        (string->url i)
-       ;; XXX not robust against pkgs with / in name
        (format "/pkg/~a" pkg))
       read))
    (error 'galaxy "Cannot find package ~a on indexes" pkg)))
@@ -182,8 +181,7 @@
    (hash-set (read-pkg-cfg) key val)))
 
 (struct pkg-info (orig-pkg checksum auto?) #:prefab)
-;; XXX remove pis?
-(struct install-info (name orig-pkg directory clean? pis? checksum))
+(struct install-info (name orig-pkg directory clean? checksum))
 
 (define (update-install-info-orig-pkg if op)
   (struct-copy install-info if
@@ -191,9 +189,6 @@
 (define (update-install-info-checksum if op)
   (struct-copy install-info if
                [checksum op]))
-
-;; XXX remove
-(define package-from-index? (make-parameter #f))
 
 ;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
@@ -352,12 +347,12 @@
            (or given-pkg-name (path->string (file-name-from-path pkg))))
          (cond
            [install:link?
-            (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f #f)]
+            (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f)]
            [else
             (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
-            (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t (package-from-index?) #f)]))]
+            (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t #f)]))]
       [(url-scheme pkg-url)
        =>
        (lambda (scheme)
@@ -390,7 +385,8 @@
                         void
                         (λ ()
                           (untar tmp.tgz tmp-dir #:strip-components 1)
-                          (install-package (path->string package-path)))
+                          (install-package (path->string package-path)
+                                           #:pkg-name given-pkg-name))
                         (λ ()
                           (delete-directory/files tmp-dir))))
                   (λ ()
@@ -430,10 +426,8 @@
                   void
                   (λ ()
                     (download-package!)
-                    ;; XXX the checksum/manifest from the site should be
-                    ;; used rather than the normal local default, and the
-                    ;; defaults for local pkgs don't apply.
-                    (install-package package-path))
+                    (install-package package-path
+                                     #:pkg-name given-pkg-name))
                   (λ ()
                     (delete-directory/files package-path)))])
            orig-pkg))
@@ -445,22 +439,27 @@
           info
           checksum))]
       [else
-       (define index-info
-         (package-index-lookup pkg))
+       (define index-info (package-index-lookup pkg))
+       (define source (hash-ref index-info 'source))
+       (define checksum (hash-ref index-info 'checksum))
+       (define info (install-package source #:pkg-name (or given-pkg-name pkg)))
+       (when (and (install-info-checksum info)
+                  install:check-sums?
+                  (not (equal? (install-info-checksum info) checksum)))
+         (error 'galaxy "Incorrect checksum on package: ~e" pkg))
        (update-install-info-orig-pkg
-        (parameterize ([package-from-index? #t])
-          (install-package
-           (hash-ref
-            index-info
-            'source)))
-        `(pis ,pkg))]))
+         (update-install-info-checksum
+          info
+          checksum)
+         `(pis ,pkg))]))
   (define db (read-pkg-db))
   (define (install-package/outer infos auto+pkg info)
     (match-define (cons auto? pkg)
                   auto+pkg)
     (match-define
-     (install-info pkg-name orig-pkg pkg-dir clean? pis? checksum)
+     (install-info pkg-name orig-pkg pkg-dir clean? checksum)
      info)
+    (define pis? (eq? 'pis (first orig-pkg)))
     ;; XXX At this point, we shouldn't have created anything in
     ;; the install directory, but right now I do
     (define (clean!)
@@ -600,10 +599,7 @@
     [(empty? to-update)
      (printf "No updates available\n")]
     [else
-     ;; XXX what if the install fails?
      (for-each (compose remove-package car) to-update)
-     ;; XXX dep-behavior
-     ;; XXX preserve auto-ness
      (install-cmd (map (curry cons #f) (map cdr to-update)))]))
 
 (define update:deps? #f)
@@ -653,10 +649,6 @@
    (set! remove:auto? #t)]
   #:args pkgs
   (remove-packages pkgs)]
- ["export"       "Export a package or distribution"
-  "Export a package or distribution"
-  #:args ()
-  (void)]
  ["show"         "Show information about installed packages"
   "Show information about installed packages"
   #:args ()
@@ -666,13 +658,12 @@
   #:once-any
   [("--set") "Completely replace the value"
    (set! config:set #t)]
-  #:args (key val)
-  (match
-      key
-    ["indexes"
+  #:args key+vals
+  (match key+vals
+    [(list* (and key "indexes") val)
      (cond
        [config:set
-        (update-pkg-cfg! key (list val))])])]
+        (update-pkg-cfg! key val)])])]
  ["create"       "Bundle a new package"
   "Bundle a new package"
   #:once-any
