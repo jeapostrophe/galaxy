@@ -34,7 +34,7 @@
      [_ rp])))
 
 (define (path->bytes* pkg)
-  (cond 
+  (cond
     [(path? pkg)
      (path->bytes pkg)]
     [(string? pkg)
@@ -166,18 +166,18 @@
             (hash-keys db))]))
 
 (define (update-pkg-db! pkg-name info)
-  (write-file-hash! 
+  (write-file-hash!
    (pkg-db-file)
    (hash-set (read-pkg-db) pkg-name info)))
 (define (remove-from-pkg-db! pkg-name)
-  (write-file-hash! 
+  (write-file-hash!
    (pkg-db-file)
    (hash-remove (read-pkg-db) pkg-name)))
 (define (read-pkg-cfg)
   (read-file-hash (pkg-config-file)))
 (define (update-pkg-cfg! key val)
-  (write-file-hash! 
-   (pkg-config-file) 
+  (write-file-hash!
+   (pkg-config-file)
    (hash-set (read-pkg-cfg) key val)))
 
 (struct pkg-info (orig-pkg checksum auto?) #:prefab)
@@ -240,20 +240,20 @@
          (append-map package-dependencies
                      all-pkgs))))
       in-pkgs))
-  (unless remove:force?    
+  (unless remove:force?
     (define pkgs-set (list->set pkgs))
     (define remaining-pkg-db-set
       (set-subtract all-pkgs-set
                     pkgs-set))
     (define deps-to-be-removed
-      (set-intersect 
+      (set-intersect
        pkgs-set
        (list->set
         (append-map package-dependencies
                     (set->list
                      remaining-pkg-db-set)))))
     (unless (set-empty? deps-to-be-removed)
-      (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e" 
+      (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e"
              (set->list deps-to-be-removed))))
   (for-each remove-package pkgs))
 
@@ -360,77 +360,77 @@
          (define checksum (remote-package-checksum orig-pkg))
          (define info
            (update-install-info-orig-pkg
-           (match scheme
-             ["github"
-              (match-define (list* user repo branch path)
-                            (map path/param-path (url-path/no-slash pkg-url)))
-              (define new-url
-                (url "https" #f "github.com" #f #t
-                     (map (λ (x) (path/param x empty))
-                          (list user repo "tarball" branch))
-                     empty
-                     #f))
-              (define tmp.tgz
-                (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
-              (define tmp-dir
-                (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
-              (define package-path
-                (apply build-path tmp-dir path))
+            (match scheme
+              ["github"
+               (match-define (list* user repo branch path)
+                             (map path/param-path (url-path/no-slash pkg-url)))
+               (define new-url
+                 (url "https" #f "github.com" #f #t
+                      (map (λ (x) (path/param x empty))
+                           (list user repo "tarball" branch))
+                      empty
+                      #f))
+               (define tmp.tgz
+                 (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
+               (define tmp-dir
+                 (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
+               (define package-path
+                 (apply build-path tmp-dir path))
 
-              (dynamic-wind
-                  void
-                  (λ ()
-                    (download-file! new-url tmp.tgz)
-                    (dynamic-wind
-                        void
-                        (λ ()
-                          (untar tmp.tgz tmp-dir #:strip-components 1)
-                          (install-package (path->string package-path)
-                                           #:pkg-name given-pkg-name))
-                        (λ ()
-                          (delete-directory/files tmp-dir))))
-                  (λ ()
-                    (delete-directory/files tmp.tgz)))]
-             [_
-              (define url-last-component
-                (path/param-path (last (url-path pkg-url))))
-              (define url-looks-like-directory?
-                (string=? "" url-last-component))
-              (define-values
-                (package-path download-package!)
-                (cond
-                  [url-looks-like-directory?
-                   (define package-path
-                     (build-path (pkg-temporary-dir)
-                                 (path/param-path
-                                  (second (reverse (url-path pkg-url))))))
-                   (define (path-like f)
-                     (build-path package-path f))
-                   (define (url-like f)
-                     (combine-url/relative pkg-url f))
-                   (values package-path
-                           (λ ()
-                             (printf "\tCloning remote directory\n")
-                             (make-directory* package-path)
-                             (define manifest
-                               (call/input-url+200 (url-like "MANIFEST") port->lines))
-                             (for ([f (in-list manifest)])
-                               (download-file! (url-like f) (path-like f)))))]
-                  [else
-                   (define package-path
-                     (build-path (pkg-temporary-dir) url-last-component))
-                   (values package-path
-                           (λ ()
-                             (download-file! pkg-url package-path)))]))
-              (dynamic-wind
-                  void
-                  (λ ()
-                    (download-package!)
-                    (install-package package-path
-                                     #:pkg-name given-pkg-name))
-                  (λ ()
-                    (delete-directory/files package-path)))])
-           orig-pkg))
+               (dynamic-wind
+                   void
+                   (λ ()
+                     (download-file! new-url tmp.tgz)
+                     (dynamic-wind
+                         void
+                         (λ ()
+                           (untar tmp.tgz tmp-dir #:strip-components 1)
+                           (install-package (path->string package-path)
+                                            #:pkg-name given-pkg-name))
+                         (λ ()
+                           (delete-directory/files tmp-dir))))
+                   (λ ()
+                     (delete-directory/files tmp.tgz)))]
+              [_
+               (define url-last-component
+                 (path/param-path (last (url-path pkg-url))))
+               (define url-looks-like-directory?
+                 (string=? "" url-last-component))
+               (define-values
+                 (package-path download-package!)
+                 (cond
+                   [url-looks-like-directory?
+                    (define package-path
+                      (build-path (pkg-temporary-dir)
+                                  (path/param-path
+                                   (second (reverse (url-path pkg-url))))))
+                    (define (path-like f)
+                      (build-path package-path f))
+                    (define (url-like f)
+                      (combine-url/relative pkg-url f))
+                    (values package-path
+                            (λ ()
+                              (printf "\tCloning remote directory\n")
+                              (make-directory* package-path)
+                              (define manifest
+                                (call/input-url+200 (url-like "MANIFEST") port->lines))
+                              (for ([f (in-list manifest)])
+                                (download-file! (url-like f) (path-like f)))))]
+                   [else
+                    (define package-path
+                      (build-path (pkg-temporary-dir) url-last-component))
+                    (values package-path
+                            (λ ()
+                              (download-file! pkg-url package-path)))]))
+               (dynamic-wind
+                   void
+                   (λ ()
+                     (download-package!)
+                     (install-package package-path
+                                      #:pkg-name given-pkg-name))
+                   (λ ()
+                     (delete-directory/files package-path)))])
+            orig-pkg))
          (when (and (install-info-checksum info)
                     install:check-sums?
                     (not (equal? (install-info-checksum info) checksum)))
@@ -448,10 +448,10 @@
                   (not (equal? (install-info-checksum info) checksum)))
          (error 'galaxy "Incorrect checksum on package: ~e" pkg))
        (update-install-info-orig-pkg
-         (update-install-info-checksum
-          info
-          checksum)
-         `(pis ,pkg))]))
+        (update-install-info-checksum
+         info
+         checksum)
+        `(pis ,pkg))]))
   (define db (read-pkg-db))
   (define (install-package/outer infos auto+pkg info)
     (match-define (cons auto? pkg)
@@ -652,7 +652,21 @@
  ["show"         "Show information about installed packages"
   "Show information about installed packages"
   #:args ()
-  (void)]
+  (let ()
+    (define db (read-pkg-db))
+    (define pkgs (sort (hash-keys db) string-ci<=?))
+    (table-display
+     (list*
+      (list "Package(auto?)" "Checksum" "Source")
+      (for/list ([pkg (in-list pkgs)])
+        (match-define (pkg-info orig-pkg checksum auto?) (hash-ref db pkg))
+        (list (format "~a~a"
+                      pkg
+                      (if auto?
+                        "*"
+                        ""))
+              (format "~a" checksum)
+              (format "~a" orig-pkg))))))]
  ["config"         "View and modify the package configuration"
   "View and modify the package configuration"
   #:once-any

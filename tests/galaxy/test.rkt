@@ -32,12 +32,10 @@
 
 ;; XXX cause raco setup to run on the new roots afterwards
 
-;; XXX show (list installed, mark the ones that are deps, show
-;; checksum and/or location on disk)
+;; XXX planet compatibility server --
+;; http://planet.racket-lang.org/servlets/pkg-info.ss
 
-;; XXX planet compatibility server
-
-;; XXX system installation tests
+;; XXX system installation tests (versus user)
 
 ;; XXX more config tests (viewing)
 
