@@ -21,8 +21,8 @@
 ;; should leave the old version in place if they are not
 ;; available]
 
-;; XXX if you update a dependency, it should still be considered
-;; a dependency after the fact
+;; XXX if you update an auto dependency, it should still be considered
+;; an auto dependency after the fact
 
 ;; XXX wrong checksum on pis package
 
@@ -40,5 +40,3 @@
 ;; XXX more config tests (viewing)
 
 ;; XXX scour github for initial packages
-
-;; XXX packages can't contain /
