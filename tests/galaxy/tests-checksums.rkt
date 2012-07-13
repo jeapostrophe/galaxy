@@ -37,6 +37,20 @@
 
    (with-fake-root
     (shelly-case
+     "checksums are checked (remote, indexed)"
+     (hash-set!
+      *index-ht-1* "galaxy-test1"
+      (hasheq 'checksum
+              (file->string "test-pkgs/galaxy-test1-bad-checksum.zip.CHECKSUM")
+              'source
+              "http://localhost:9999/galaxy-test1-bad-checksum.zip"))
+     $ "raco pkg config --set indexes http://localhost:9990 http://localhost:9991"
+     $ "racket -e '(require galaxy-test1)'" =exit> 1
+     $ "raco pkg install galaxy-test1" =exit> 1
+     $ "racket -e '(require galaxy-test1)'" =exit> 1))
+
+   (with-fake-root
+    (shelly-case
      "checksums are checked (remote)"
      $ "racket -e '(require galaxy-test1)'" =exit> 1
      $ "raco pkg install http://localhost:9999/galaxy-test1-bad-checksum.zip" =exit> 1
