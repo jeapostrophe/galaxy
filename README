@@ -229,5 +229,6 @@ implementation and its use simple.
 * More things to do in the future
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
+** TODO Make a GUI
 ** TODO Implement export
 ** TODO Implement export distribution

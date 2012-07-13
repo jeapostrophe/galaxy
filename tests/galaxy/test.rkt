@@ -38,3 +38,11 @@
 ;; XXX more config tests (viewing)
 
 ;; XXX scour github for initial packages
+
+;; XXX use file-locks on the package database, etc
+
+;; XXX ensure that nothing is put into the installation directory
+;; until it will be successful. Right now when I copy a directory in
+;; (which is the last step of all the various installation methods, it
+;; is copied into the installation directory before the
+;; dependencies/conflicts are evaluated)

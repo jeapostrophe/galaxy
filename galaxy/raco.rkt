@@ -18,7 +18,8 @@
          racket/dict
          racket/set
          unstable/debug
-         "util.rkt")
+         "util.rkt"
+         "util-plt.rkt")
 
 (define (file->value* pth def)
   (with-handlers ([exn:fail? (λ (x) def)])
@@ -136,8 +137,6 @@
                         get-pure-port
                         port->string)])]))
 
-;; XXX with-file-lock
-;; XXX make structs
 (define (read-file-hash file)
   (define the-db
     (with-handlers ([exn? (λ (x) (hash))])
@@ -190,7 +189,6 @@
   (struct-copy install-info if
                [checksum op]))
 
-;; XXX struct based general UI for GUI integration?
 (define install:dep-behavior #f)
 (define install:link? #f)
 (define install:force? #f)
@@ -293,41 +291,7 @@
          [#"zip"
           (system* (find-executable-path "unzip") "-n" pkg "-d" pkg-dir)]
          [#"plt"
-          ;; XXX This is to deal with the fact that
-          ;; fold-plt-archive doesn't really give a
-          ;; path-string? to the callback functions. Perhaps a
-          ;; PR should be submitted?
-          (define (path-descriptor->path pd)
-            (if (or (eq? 'same pd)
-                    (path? pd))
-              pd
-              (second pd)))
-          (define (write-file file* content-p)
-            (define file (path-descriptor->path file*))
-            (printf "\twriting ~a\n" file)
-            (with-output-to-file
-                (build-path pkg-dir file)
-              (λ () (copy-port content-p (current-output-port)))))
-          ;; XXX writing this at all was necessary because
-          ;; unpack seems to break on using "." and doesn't
-          ;; allow me to not use the user collection path.
-          (fold-plt-archive pkg
-                            void
-                            void
-                            (λ (dir* _a)
-                              (define dir (path-descriptor->path dir*))
-                              (printf "\tmaking ~a\n" dir)
-                              (unless (equal? (build-path 'same)
-                                              dir)
-                                (make-directory
-                                 (build-path pkg-dir
-                                             dir))))
-                            (case-lambda
-                              [(file content-p _a)
-                               (write-file file content-p)]
-                              [(file content-p _m _a)
-                               (write-file file content-p)])
-                            (void))]
+          (unplt pkg pkg-dir)]
          [x
           (error 'pkg "Invalid package format: ~e" x)])
        (dynamic-wind
@@ -460,8 +424,6 @@
      (install-info pkg-name orig-pkg pkg-dir clean? checksum)
      info)
     (define pis? (eq? 'pis (first orig-pkg)))
-    ;; XXX At this point, we shouldn't have created anything in
-    ;; the install directory, but right now I do
     (define (clean!)
       (when clean?
         (delete-directory/files pkg-dir)))
