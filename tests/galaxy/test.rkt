@@ -10,7 +10,8 @@
 (run-tests
  '("basic" "create" "install"
    "network" "conflicts" "checksums"
-   "deps" "update" "remove"))
+   "deps" "update" "remove"
+   "locking"))
 
 ;; XXX update should support different dep-behavior (like install)
 
@@ -26,8 +27,6 @@
 
 ;; XXX packages that aren't roots
 
-;; XXX lock the installation directory
-
 ;; XXX cause raco setup to run on the new roots afterwards
 
 ;; XXX planet compatibility server --
@@ -38,8 +37,6 @@
 ;; XXX more config tests (viewing)
 
 ;; XXX scour github for initial packages
-
-;; XXX use file-locks on the package database, etc
 
 ;; XXX ensure that nothing is put into the installation directory
 ;; until it will be successful. Right now when I copy a directory in

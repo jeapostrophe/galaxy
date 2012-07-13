@@ -98,6 +98,19 @@
   (build-path (pkg-dir) "tmp"))
 (define (pkg-installed-dir)
   (build-path (pkg-dir) "installed"))
+(define (pkg-lock-file)
+  (make-lock-file-name (pkg-db-file)))
+
+(define (with-package-lock* t)
+  (make-directory* (pkg-dir))
+  (call-with-file-lock/timeout
+   #f 'exclusive
+   t
+   (λ () (error 'galaxy "Could not acquire package lock: ~e"
+                (pkg-lock-file)))
+   #:lock-file (pkg-lock-file)))
+(define-syntax-rule (with-package-lock e ...)
+  (with-package-lock* (λ () e ...)))
 
 (define (package-index-lookup pkg)
   (or
@@ -568,126 +581,127 @@
 (define remove:force? #f)
 (define remove:auto? #f)
 
-(svn-style-command-line
- #:program (short-program+command-name)
- #:argv (current-command-line-arguments)
- "This tool is used for managing installed packages."
- ["install"      "Install packages"
-  "Install packages"
-  #:once-each
-  ["--deps" dep-behavior
-   ("Specify the behavior for dependencies."
-    "Options are: fail, force, search-ask, search-auto."
-    "  'fail' cancels the installation if dependencies are unmet (default for most packages)."
-    "  'force' installs the package despite missing dependencies."
-    "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
-    "  'search-auto' is like 'search-auto' but does not ask for permission to install.")
-   (set! install:dep-behavior (string->symbol dep-behavior))]
-  ["--force"
-   "Ignores conflicts"
-   (set! install:force? #t)]
-  ["--ignore-checksums"
-   "Ignores checksums"
-   (set! install:check-sums? #f)]
-  ["--link"
-   "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
-   (set! install:link? #t)]
-  #:args pkgs
-  (install-cmd #:dep-behavior install:dep-behavior
-               (map (curry cons #f) pkgs))]
- ["update"       "Update packages"
-  "Update packages"
-  #:once-each
-  ["--deps" "Check named packages' dependencies for updates"
-   (set! update:deps? #t)]
-  #:args pkgs
-  (update-packages pkgs #:deps? update:deps?)]
- ["remove"       "Remove packages"
-  "Remove packages"
-  #:once-each
-  ["--force" "Force removal of packages"
-   (set! remove:force? #t)]
-  ["--auto" "Remove automatically installed packages with no dependencies"
-   (set! remove:auto? #t)]
-  #:args pkgs
-  (remove-packages pkgs)]
- ["show"         "Show information about installed packages"
-  "Show information about installed packages"
-  #:args ()
-  (let ()
-    (define db (read-pkg-db))
-    (define pkgs (sort (hash-keys db) string-ci<=?))
-    (table-display
-     (list*
-      (list "Package(auto?)" "Checksum" "Source")
-      (for/list ([pkg (in-list pkgs)])
-        (match-define (pkg-info orig-pkg checksum auto?) (hash-ref db pkg))
-        (list (format "~a~a"
-                      pkg
-                      (if auto?
-                        "*"
-                        ""))
-              (format "~a" checksum)
-              (format "~a" orig-pkg))))))]
- ["config"         "View and modify the package configuration"
-  "View and modify the package configuration"
-  #:once-any
-  [("--set") "Completely replace the value"
-   (set! config:set #t)]
-  #:args key+vals
-  (match key+vals
-    [(list* (and key "indexes") val)
-     (cond
-       [config:set
-        (update-pkg-cfg! key val)])])]
- ["create"       "Bundle a new package"
-  "Bundle a new package"
-  #:once-any
-  ["--format" format
-   ("Select the format of the package to be created."
-    "Options are: tgz, zip, plt")
-   (set! create:format format)]
-  ["--manifest"
-   "Creates a manifest file for a directory, rather than an archive"
-   (set! create:format "MANIFEST")]
-  #:args (maybe-dir)
-  (begin
-    (define dir (regexp-replace* #rx"/$" maybe-dir ""))
-    (unless (directory-exists? dir)
-      (error 'galaxy "directory does not exist: ~e" dir))
-    (match create:format
-      ["MANIFEST"
-       (with-output-to-file
-           (build-path dir "MANIFEST")
-         #:exists 'replace
-         (λ ()
-           (for ([f (in-list (parameterize ([current-directory dir])
-                               (find-files file-exists?)))])
-             (display f)
-             (newline))))]
-      [else
-       (define pkg (format "~a.~a" dir create:format))
-       (define pkg-name
-         (regexp-replace
-          (regexp (format "~a$" (regexp-quote (format ".~a" create:format))))
-          (path->string (file-name-from-path pkg))
-          ""))
-       (match create:format
-         ["tgz"
-          (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
-            (delete-file pkg)
-            (error 'galaxy "Package creation failed"))]
-         ["zip"
-          (define orig-pkg (normalize-path pkg))
-          (parameterize ([current-directory dir])
-            (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
-              (delete-file pkg)
-              (error 'galaxy "Package creation failed")))]
-         ["plt"
-          (pack-plt pkg pkg-name (list dir)
-                    #:as-paths (list "."))]
-         [x
-          (error 'pkg "Invalid package format: ~e" x)])
-       (define chk (format "~a.CHECKSUM" pkg))
-       (with-output-to-file chk #:exists 'replace
-                            (λ () (display (call-with-input-file pkg sha1))))]))])
+(with-package-lock
+ (svn-style-command-line
+  #:program (short-program+command-name)
+  #:argv (current-command-line-arguments)
+  "This tool is used for managing installed packages."
+  ["install"      "Install packages"
+   "Install packages"
+   #:once-each
+   ["--deps" dep-behavior
+    ("Specify the behavior for dependencies."
+     "Options are: fail, force, search-ask, search-auto."
+     "  'fail' cancels the installation if dependencies are unmet (default for most packages)."
+     "  'force' installs the package despite missing dependencies."
+     "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
+     "  'search-auto' is like 'search-auto' but does not ask for permission to install.")
+    (set! install:dep-behavior (string->symbol dep-behavior))]
+   ["--force"
+    "Ignores conflicts"
+    (set! install:force? #t)]
+   ["--ignore-checksums"
+    "Ignores checksums"
+    (set! install:check-sums? #f)]
+   ["--link"
+    "When used with a directory package, leave the directory in place, but add a link to it in the package directory."
+    (set! install:link? #t)]
+   #:args pkgs
+   (install-cmd #:dep-behavior install:dep-behavior
+                (map (curry cons #f) pkgs))]
+  ["update"       "Update packages"
+   "Update packages"
+   #:once-each
+   ["--deps" "Check named packages' dependencies for updates"
+    (set! update:deps? #t)]
+   #:args pkgs
+   (update-packages pkgs #:deps? update:deps?)]
+  ["remove"       "Remove packages"
+   "Remove packages"
+   #:once-each
+   ["--force" "Force removal of packages"
+    (set! remove:force? #t)]
+   ["--auto" "Remove automatically installed packages with no dependencies"
+    (set! remove:auto? #t)]
+   #:args pkgs
+   (remove-packages pkgs)]
+  ["show"         "Show information about installed packages"
+   "Show information about installed packages"
+   #:args ()
+   (let ()
+     (define db (read-pkg-db))
+     (define pkgs (sort (hash-keys db) string-ci<=?))
+     (table-display
+      (list*
+       (list "Package(auto?)" "Checksum" "Source")
+       (for/list ([pkg (in-list pkgs)])
+         (match-define (pkg-info orig-pkg checksum auto?) (hash-ref db pkg))
+         (list (format "~a~a"
+                       pkg
+                       (if auto?
+                         "*"
+                         ""))
+               (format "~a" checksum)
+               (format "~a" orig-pkg))))))]
+  ["config"         "View and modify the package configuration"
+   "View and modify the package configuration"
+   #:once-any
+   [("--set") "Completely replace the value"
+    (set! config:set #t)]
+   #:args key+vals
+   (match key+vals
+     [(list* (and key "indexes") val)
+      (cond
+        [config:set
+         (update-pkg-cfg! key val)])])]
+  ["create"       "Bundle a new package"
+   "Bundle a new package"
+   #:once-any
+   ["--format" format
+    ("Select the format of the package to be created."
+     "Options are: tgz, zip, plt")
+    (set! create:format format)]
+   ["--manifest"
+    "Creates a manifest file for a directory, rather than an archive"
+    (set! create:format "MANIFEST")]
+   #:args (maybe-dir)
+   (begin
+     (define dir (regexp-replace* #rx"/$" maybe-dir ""))
+     (unless (directory-exists? dir)
+       (error 'galaxy "directory does not exist: ~e" dir))
+     (match create:format
+       ["MANIFEST"
+        (with-output-to-file
+            (build-path dir "MANIFEST")
+          #:exists 'replace
+          (λ ()
+            (for ([f (in-list (parameterize ([current-directory dir])
+                                (find-files file-exists?)))])
+              (display f)
+              (newline))))]
+       [else
+        (define pkg (format "~a.~a" dir create:format))
+        (define pkg-name
+          (regexp-replace
+           (regexp (format "~a$" (regexp-quote (format ".~a" create:format))))
+           (path->string (file-name-from-path pkg))
+           ""))
+        (match create:format
+          ["tgz"
+           (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
+             (delete-file pkg)
+             (error 'galaxy "Package creation failed"))]
+          ["zip"
+           (define orig-pkg (normalize-path pkg))
+           (parameterize ([current-directory dir])
+             (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
+               (delete-file pkg)
+               (error 'galaxy "Package creation failed")))]
+          ["plt"
+           (pack-plt pkg pkg-name (list dir)
+                     #:as-paths (list "."))]
+          [x
+           (error 'pkg "Invalid package format: ~e" x)])
+        (define chk (format "~a.CHECKSUM" pkg))
+        (with-output-to-file chk #:exists 'replace
+                             (λ () (display (call-with-input-file pkg sha1))))]))]))
