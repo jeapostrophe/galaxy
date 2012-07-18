@@ -1,18 +1,33 @@
 #lang racket/base
-(require "util.rkt")
+(require (for-syntax racket/base
+                     "util.rkt")
+         "util.rkt")
 
-(define (run-tests l)
-  (for ([f (in-list l)])
-    (dynamic-require
-     `(file ,(path->string (build-path test-directory (format "tests-~a.rkt" f))))
-     #f)))
+(define-syntax (run-tests stx)
+  (syntax-case stx ()
+    [(_ f ...)
+     (with-syntax
+         ([(tests-f ...)
+           (for/list ([f-stx (in-list (syntax->list #'(f ...)))])
+             (define f (syntax->datum f-stx))
+             `(file ,(path->string (build-path test-directory (format "tests-~a.rkt" f)))))])
+       (syntax/loc stx
+         (run-tests*
+          (list (let ()
+                  (local-require (only-in tests-f run-pkg-tests))
+                  run-pkg-tests)
+                ...))))]))
 
-;; XXX This is actually broken because of ports
+(define (run-tests* l)
+  (run-pkg-tests*
+   (λ ()
+     (for-each (λ (x) (x)) l))))
+
 (run-tests
- '("basic" "create" "install"
-   "network" "conflicts" "checksums"
-   "deps" "update" "remove"
-   "locking" "overwrite"))
+ "basic" "create" "install"
+ "network" "conflicts" "checksums"
+ "deps" "update" "remove"
+ "locking" "overwrite")
 
 ;; XXX update should support different dep-behavior (like install)
 

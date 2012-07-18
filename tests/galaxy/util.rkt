@@ -101,12 +101,25 @@
 (define-syntax-rule (with-servers e ...)
   (with-servers* (λ () e ...)))
 
-(define-syntax-rule (pkg-tests e ...)
+(define-syntax (pkg-tests stx)
+  (syntax-case stx ()
+    [(_ e ...)
+     (with-syntax
+         ([run-pkg-tests (datum->syntax #f 'run-pkg-tests)])
+       (syntax/loc stx
+         (begin
+           (define (run-pkg-tests)
+             (shelly-begin
+              e ...))
+           (provide run-pkg-tests)
+           (module+ main
+             (run-pkg-tests* run-pkg-tests)))))]))
+
+(define (run-pkg-tests* t)
   (with-servers
    (with-fake-root
     (parameterize ([current-directory test-directory])
-      (shelly-begin
-       e ...)))))
+      (t)))))
 
 (define-syntax-rule (shelly-install** message pkg rm-pkg (pre ...) (more ...))
   (with-fake-root
