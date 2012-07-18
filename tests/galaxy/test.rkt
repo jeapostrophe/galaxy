@@ -44,5 +44,3 @@
 ;; (which is the last step of all the various installation methods, it
 ;; is copied into the installation directory before the
 ;; dependencies/conflicts are evaluated)
-
-;; XXX conflict with a file in a linked directory

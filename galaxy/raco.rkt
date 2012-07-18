@@ -452,7 +452,7 @@
           (or (and (file-exists? (build-path (absolute-collects-dir) f))
                    "racket")
               (for/or ([other-pkg (in-hash-keys db)])
-                (define p (build-path (pkg-installed-dir) other-pkg f))
+                (define p (build-path (package-directory other-pkg) f))
                 (and (file-exists? p)
                      other-pkg)))))
        =>

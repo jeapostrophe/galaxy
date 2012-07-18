@@ -21,19 +21,33 @@
    "conflicts"
    (shelly-install "double install fails" "test-pkgs/galaxy-test1.zip"
                    $ "raco pkg install test-pkgs/galaxy-test1.zip" =exit> 1)
+
    (with-fake-root
     (shelly-case
      "conflicts with racket fail"
      $ "test -f test-pkgs/racket-conflict.tgz"
      $ "raco pkg install test-pkgs/racket-conflict.tgz" =exit> 1))
+
    (shelly-install "conflicts are caught" "test-pkgs/galaxy-test1.zip"
                    $ "test -f test-pkgs/galaxy-test1-conflict.zip"
                    $ "raco pkg install test-pkgs/galaxy-test1-conflict.zip" =exit> 1)
+
+   (shelly-wind
+    $ "cp -r test-pkgs/galaxy-test1 test-pkgs/galaxy-test1-linking"
+    (shelly-install* "conflicts are caught, even with a link" 
+                    "--link test-pkgs/galaxy-test1-linking"
+                    "galaxy-test1-linking"
+                    $ "test -f test-pkgs/galaxy-test1-conflict.zip"
+                    $ "raco pkg install test-pkgs/galaxy-test1-conflict.zip" =exit> 1)
+    (finally
+     $ "rm -fr test-pkgs/galaxy-test1-linking"))
+
    (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1.zip"
                    $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
                    $ "raco pkg install --force test-pkgs/galaxy-test1-conflict.zip" =exit> 0
                    $ "racket -e '(require galaxy-test1/conflict)'" =exit> 42
                    $ "raco pkg remove galaxy-test1-conflict")
+
    (shelly-install "conflicts can be forced" "test-pkgs/galaxy-test1-conflict.zip"
                    $ "racket -e '(require galaxy-test1/conflict)'" =exit> 43
                    $ "raco pkg install --force test-pkgs/galaxy-test1.zip" =exit> 0
