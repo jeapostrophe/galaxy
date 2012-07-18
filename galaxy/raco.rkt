@@ -326,7 +326,9 @@
            [install:link?
             (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f)]
            [else
-            (define pkg-dir (build-path (pkg-installed-dir) pkg-name))
+            (define pkg-dir
+              (make-temporary-file "pkg~a" 'directory (pkg-temporary-dir)))
+            (delete-directory pkg-dir)
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
             (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t #f)]))]
@@ -506,8 +508,18 @@
                  (eprintf "Invalid input: ~e\n" x)
                  (loop)]))]))]
       [else
-       (dprintf "creating link to ~e" pkg-dir)
-       (links pkg-dir
+       (define final-pkg-dir
+         (cond
+           [clean?
+            (define final-pkg-dir (build-path (pkg-installed-dir) pkg-name))
+            (make-parent-directory* final-pkg-dir)
+            (copy-directory/files pkg-dir final-pkg-dir)
+            (clean!)
+            final-pkg-dir]
+           [else
+            pkg-dir]))
+       (dprintf "creating link to ~e" final-pkg-dir)
+       (links final-pkg-dir
               #:user? #t
               #:root? #t)
        (define this-pkg-info

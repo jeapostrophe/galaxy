@@ -26,6 +26,9 @@
   (parameterize ([current-test-case-around wrapping-test-case-around])
     (test-case m e ...)))
 
+(define-syntax-rule (check-similar? act exp name)
+  (check-regexp-match (regexp-quote exp) act name))
+
 (begin-for-syntax
   (define-splicing-syntax-class shelly-case
     #:attributes (code)
@@ -67,10 +70,10 @@
                   (display actual-error (current-error-port))
                   #,(syntax/loc #'command-line
                       (when output-str
-                        (check-equal? actual-output output-str "stdout")))
+                        (check-similar? actual-output output-str "stdout")))
                   #,(syntax/loc #'command-line
                       (when error-str
-                        (check-equal? actual-error error-str "stderr")))
+                        (check-similar? actual-error error-str "stderr")))
                   #,(syntax/loc #'command-line
                       (check-equal? cmd-status exit-cond "exit code"))))))
     (pattern (~and (~not (~datum $))
