@@ -38,5 +38,3 @@
 ;; XXX more config tests (viewing)
 
 ;; XXX scour github for initial packages
-
-;; XXX if one dep fails, the whol install should revert

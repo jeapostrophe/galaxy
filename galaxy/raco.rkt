@@ -451,12 +451,21 @@
       [(and
         (not install:force?)
         (for/or ([f (in-list (directory-list* pkg-dir))])
-          (or (and (file-exists? (build-path (absolute-collects-dir) f))
-                   "racket")
-              (for/or ([other-pkg (in-hash-keys db)])
-                (define p (build-path (package-directory other-pkg) f))
-                (and (file-exists? p)
-                     other-pkg)))))
+          (or 
+           ;; Compare with Racket
+           (and (file-exists? (build-path (absolute-collects-dir) f))
+                "racket")
+           ;; Compare with installed packages
+           (for/or ([other-pkg (in-hash-keys db)])
+             (define p (build-path (package-directory other-pkg) f))
+             (and (file-exists? p)
+                  other-pkg))
+           ;; Compare with simultaneous installs
+           (for/or ([other-pkg-info (in-list infos)]
+                    #:unless (eq? other-pkg-info info))
+             (define p (build-path (install-info-directory other-pkg-info) f))
+             (and (file-exists? p)
+                  (install-info-name other-pkg-info))))))
        =>
        (λ (conflicting-pkg)
          (clean!)
@@ -508,27 +517,30 @@
                  (eprintf "Invalid input: ~e\n" x)
                  (loop)]))]))]
       [else
-       (define final-pkg-dir
-         (cond
-           [clean?
-            (define final-pkg-dir (build-path (pkg-installed-dir) pkg-name))
-            (make-parent-directory* final-pkg-dir)
-            (copy-directory/files pkg-dir final-pkg-dir)
-            (clean!)
-            final-pkg-dir]
-           [else
-            pkg-dir]))
-       (dprintf "creating link to ~e" final-pkg-dir)
-       (links final-pkg-dir
-              #:user? #t
-              #:root? #t)
-       (define this-pkg-info
-         (pkg-info orig-pkg checksum auto?))
-       (dprintf "updating db with ~e to ~e" pkg-name this-pkg-info)
-       (update-pkg-db! pkg-name this-pkg-info)]))
+       (λ ()
+         (define final-pkg-dir
+           (cond
+             [clean?
+              (define final-pkg-dir (build-path (pkg-installed-dir) pkg-name))
+              (make-parent-directory* final-pkg-dir)
+              (copy-directory/files pkg-dir final-pkg-dir)
+              (clean!)
+              final-pkg-dir]
+             [else
+              pkg-dir]))
+         (dprintf "creating link to ~e" final-pkg-dir)
+         (links final-pkg-dir
+                #:user? #t
+                #:root? #t)
+         (define this-pkg-info
+           (pkg-info orig-pkg checksum auto?))
+         (dprintf "updating db with ~e to ~e" pkg-name this-pkg-info)
+         (update-pkg-db! pkg-name this-pkg-info))]))
   (define infos
     (map install-package (map cdr auto+pkgs)))
-  (for-each (curry install-package/outer infos) auto+pkgs infos))
+  (define do-its
+    (map (curry install-package/outer infos) auto+pkgs infos))
+  (for-each (λ (t) (t)) do-its))
 
 (define (install-cmd #:dep-behavior [dep-behavior #f] pkgs)
   (with-handlers ([list?
