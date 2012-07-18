@@ -7,6 +7,7 @@
      `(file ,(path->string (build-path test-directory (format "tests-~a.rkt" f))))
      #f)))
 
+;; XXX This is actually broken because of ports
 (run-tests
  '("basic" "create" "install"
    "network" "conflicts" "checksums"
@@ -43,3 +44,5 @@
 ;; (which is the last step of all the various installation methods, it
 ;; is copied into the installation directory before the
 ;; dependencies/conflicts are evaluated)
+
+;; XXX conflict with a file in a linked directory
