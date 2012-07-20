@@ -227,6 +227,7 @@ implementation and its use simple.
    I'd like to extend the props so there is meta/props.d where
    packages can install custom props for DrDr
 * More things to do in the future
+** TODO Remove discussion of single collect packages, instead just fork for existing githubs
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
 ** TODO Make a GUI
