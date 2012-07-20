@@ -3,6 +3,8 @@
                      "util.rkt")
          "util.rkt")
 
+;; By making these syntax-time includes, it made it so they would be
+;; rebuilt and register as real dependencies.
 (define-syntax (run-tests stx)
   (syntax-case stx ()
     [(_ f ...)
