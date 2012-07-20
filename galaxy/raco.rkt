@@ -207,7 +207,7 @@
 (define install:force? #f)
 (define install:check-sums? #t)
 (define create:format "plt")
-(define config:set #t)
+(define config:set #f)
 
 (define (package-directory pkg-name)
   (match-define (pkg-info orig-pkg checksum _)
@@ -451,7 +451,7 @@
       [(and
         (not install:force?)
         (for/or ([f (in-list (directory-list* pkg-dir))])
-          (or 
+          (or
            ;; Compare with Racket
            (and (file-exists? (build-path (absolute-collects-dir) f))
                 "racket")
@@ -673,11 +673,28 @@
    [("--set") "Completely replace the value"
     (set! config:set #t)]
    #:args key+vals
-   (match key+vals
-     [(list* (and key "indexes") val)
-      (cond
-        [config:set
-         (update-pkg-cfg! key val)])])]
+   (cond
+     [config:set
+      (match key+vals
+        [(list* (and key "indexes") val)
+         (update-pkg-cfg! key val)]
+        [(list key)
+         (error 'galaxy "unsupported config key: ~e" key)]
+        [(list)
+         (error 'galaxy "must provide config key")])]
+     [else
+      (match key+vals
+        [(list key)
+         (match key
+           ["indexes"
+            (for ([s (in-list (hash-ref (read-pkg-cfg) key empty))])
+              (printf "~a\n" s))]
+           [_
+            (error 'galaxy "unsupported config key: ~e" key)])]
+        [(list)
+         (error 'galaxy "must provide config key")]
+        [_
+         (error 'galaxy "must provide only config key")])])]
   ["create"       "Bundle a new package"
    "Bundle a new package"
    #:once-any

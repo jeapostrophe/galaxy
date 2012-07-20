@@ -29,7 +29,8 @@
  "basic" "create" "install"
  "network" "conflicts" "checksums"
  "deps" "update" "remove"
- "locking" "overwrite")
+ "locking" "overwrite"
+ "config")
 
 ;; XXX update should support different dep-behavior (like install)
 
@@ -51,7 +52,5 @@
 ;; http://planet.racket-lang.org/servlets/pkg-info.ss
 
 ;; XXX system installation tests (versus user)
-
-;; XXX more config tests (viewing)
 
 ;; XXX scour github for initial packages

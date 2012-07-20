@@ -27,7 +27,12 @@
     (test-case m e ...)))
 
 (define-syntax-rule (check-similar? act exp name)
-  (check-regexp-match (regexp-quote exp) act name))
+  (let ()
+    (define exp-v exp)
+    (define act-v act)
+    (if (regexp? exp-v)
+      (check-regexp-match exp-v act-v name)
+      (check-equal? act-v exp-v name))))
 
 (begin-for-syntax
   (define-splicing-syntax-class shelly-case

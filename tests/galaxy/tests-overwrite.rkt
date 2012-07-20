@@ -10,7 +10,7 @@
    ;; Step 1. Try to install a package that will fail
    $ "raco pkg install test-pkgs/galaxy-test1.zip test-pkgs/galaxy-test1.zip" 
    =exit> 1
-   =stderr> "galaxy: conflicts with \"galaxy-test1\""
+   =stderr> #rx"galaxy: conflicts with \"galaxy-test1\""
 
    ;; Step 2. Try to install safely
    $ "raco pkg install test-pkgs/galaxy-test1.zip")))
