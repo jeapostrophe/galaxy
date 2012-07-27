@@ -25,11 +25,13 @@
                     (λ (dir* _a)
                       (define dir (path-descriptor->path dir*))
                       (printf "\tmaking ~a\n" dir)
-                      (unless (equal? (build-path 'same)
-                                      dir)
-                        (make-directory
-                         (build-path pkg-dir
-                                     dir))))
+                      (define new-dir
+                        (build-path pkg-dir
+                                    dir))
+                      (unless (or (equal? (build-path 'same)
+                                          dir)
+                                  (directory-exists? new-dir))
+                        (make-directory new-dir)))
                     (case-lambda
                       [(file content-p _a)
                        (write-file file content-p)]

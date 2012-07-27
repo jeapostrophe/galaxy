@@ -21,9 +21,12 @@
   (define orig
     (build-path root "orig"))
   (make-directory* orig)
+  (define work
+    (build-path root "work"))
+  (make-directory* work)
 
   (for ([p (in-list pkgs)])
-    (match-define (list user pkg (list min maj)) p)
+    (match-define (list user pkg (list maj min)) p)
     (define dl-url
       (struct-copy url planet-download-url
                    [query
@@ -34,13 +37,22 @@
                         (min-lo . ,(get min))
                         (min-hi . ,(get min))
                         (path   . ,(get (list user)))))]))
+    (define pkg-short
+      (format "~a:~a:~a:~a" user maj min pkg))
     (define dest
-      (build-path orig (format "~a:~a:~a:~a" user maj min pkg)))
+      (build-path orig pkg-short))
     (unless (file-exists? dest)
-      (printf "Downloading ~a/~a:~a:~a\n" user pkg maj min)
+      (printf "Downloading ~a\n" pkg-short)
       (call-with-output-file dest
         (λ (out)
-          (call/input-url pkg-info-url get-pure-port (λ (in) (copy-port in out))))))))
+          (call/input-url dl-url get-pure-port (λ (in) (copy-port in out))))))
+    (define dest-dir
+      (build-path work pkg-short))
+    (unless (directory-exists? dest-dir)
+      (printf "Unpacking ~a\n" pkg-short)
+      (make-directory dest-dir)
+      (local-require galaxy/util-plt)
+      (unplt dest dest-dir))))
 
 (exit 1)
 (module+ main
