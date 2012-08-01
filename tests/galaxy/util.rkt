@@ -75,6 +75,8 @@
 (define *index-ht-2* (make-hash))
 (define (start-galaxy-server index-ht port)
   (serve/servlet (galaxy-index/basic
+                  (λ ()
+                    (hash-keys index-ht))
                   (λ (pkg-name)
                     (define r (hash-ref index-ht pkg-name #f))
                     (printf "[>server ~a] ~a = ~a\n" port pkg-name r)

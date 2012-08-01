@@ -124,25 +124,28 @@
 
 ;; Initialize the root on boot
 (module+ main
-  (let ()
-    (define pkg-info-url (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
-    (define pkgs (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
-    (define planet-download-url
-      (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
-    (define orig-pkg
-      (build-path root "orig-pkg"))
-    (make-directory* orig-pkg)
-    (define orig
-      (build-path root "orig"))
-    (make-directory* orig)
-    (define work
-      (build-path root "work"))
-    (make-directory* work)
-    (define pkg-depo
-      (build-path root "pkgs"))
-    (make-directory* pkg-depo)
+  (define orig-pkg
+    (build-path root "orig-pkg"))
+  (make-directory* orig-pkg)
+  (define orig
+    (build-path root "orig"))
+  (make-directory* orig)
+  (define work
+    (build-path root "work"))
+  (make-directory* work)
+  (define pkg-depo
+    (build-path root "pkgs"))
+  (make-directory* pkg-depo)
+  (define pkg-depo-dir "static")
+  (make-directory* (build-path pkg-depo pkg-depo-dir))
 
-    (for ([p (in-list pkgs)])
+  (define pkg-info-url (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
+  (define pkgs (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
+  (define planet-download-url
+    (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
+
+  (define all-pkg-list
+    (for/list ([p (in-list pkgs)])
       (match-define (list user pkg (list maj min)) p)
       (define dl-url
         (struct-copy url planet-download-url
@@ -226,25 +229,37 @@
                      all-deps)))
 
           (printf "\tdeps ~a\n" deps)
-          (display-to-file
+          (write-to-file
            `((dependency ,@deps))
            (build-path pkg-dir "METADATA.rktd"))))
 
-      (define pkg-pth (build-path pkg-depo pkg-name.plt))
+      (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
       (unless (file-exists? pkg-pth)
         (printf "Packaging ~a\n" pkg-short)
         (parameterize ([current-directory work])
           (system (format "raco pkg create ~a" pkg-name))
           (rename-file-or-directory
-           (build-path work pkg-name.plt) pkg-pth))))))
+           (build-path work pkg-name.plt) pkg-pth)))
 
-(module+ main
-  (exit 1)
+      pkg-name))
+
+  (define pkg-list
+    ;; No idea why there are duplicates
+    (remove-duplicates all-pkg-list))
+
   (define port 6319)
   (serve/servlet (galaxy-index/basic
+                  (λ () pkg-list)
                   (λ (pkg-name)
-                    (printf "[>server] ~a\n" pkg-name)
-                    #f))
+                    (and (directory-exists? (build-path work pkg-name))
+                         (hasheq 'checksum
+                                 (file->string
+                                  (build-path work (format "~a.plt.CHECKSUM" pkg-name)))
+                                 'source
+                                 (format "http://localhost:~a/~a/~a.plt"
+                                         port pkg-depo-dir pkg-name)))))
                  #:command-line? #t
+                 #:extra-files-paths
+                 (list pkg-depo)
                  #:servlet-regexp #rx""
                  #:port port))
