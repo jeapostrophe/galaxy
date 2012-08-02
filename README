@@ -227,6 +227,15 @@ implementation and its use simple.
    I'd like to extend the props so there is meta/props.d where
    packages can install custom props for DrDr
 * More things to do in the future
+** TODO Some planet packages had to be manually changed
+   - soegaard:4:2:galore.plt had a comment that was a fictitious package
+   - cce:7:8:scheme.plt had a documentation not that was also
+   - cce:8:23:dracula.plt has a copy of cce:scheme.plt so it was there
+   too
+   - untyped:3:24:unlib.plt has a similar "problem"
+   - untyped:2:9:snooze.plt does too (also a copy)
+   - untyped autoplanet has a similar issue
+   - neil mcfly-tools ditto
 ** TODO Remove discussion of single collect packages, instead just fork for existing githubs
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)

@@ -18,6 +18,7 @@
          racket/dict
          racket/set
          unstable/debug
+         racket/string
          "util.rkt"
          "util-plt.rkt")
 
@@ -71,7 +72,13 @@
 
 (define (call/input-url+200 u fun)
   (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
-  (fun ip))
+  (and
+   (string=? "200"
+             (second
+              ;; XXX This is a little inefficient, because we just
+              ;; want the second word
+              (string-split hs)))
+   (fun ip)))
 (define (download-file! url file #:fail-okay? [fail-okay? #f])
   (with-handlers
       ([exn:fail?
@@ -134,7 +141,7 @@
         (match-define (list* user repo branch path)
                       (map path/param-path (url-path/no-slash pkg-url)))
         (define branches
-          (call/input-url
+          (call/input-url+200
            (url "https" #f "api.github.com" #f #t
                 (map (λ (x) (path/param x empty))
                      (list "repos" user repo "branches"))
@@ -146,9 +153,8 @@
           (and (equal? (hash-ref b 'name) (string->symbol branch))
                (hash-ref (hash-ref b 'commit) 'sha)))]
        [_
-        (call/input-url (string->url (string-append pkg-url-str ".CHECKSUM"))
-                        get-pure-port
-                        port->string)])]))
+        (call/input-url+200 (string->url (string-append pkg-url-str ".CHECKSUM"))
+                            port->string)])]))
 
 (define (read-file-hash file)
   (define the-db
@@ -286,7 +292,8 @@
              (sha1 (current-input-port)))))
        (unless (or (not expected-checksum)
                    (string=? expected-checksum actual-checksum))
-         (error 'pkg "Incorrect checksum on package"))
+         (error 'pkg "Incorrect checksum on package: expected ~e, got ~e"
+                expected-checksum actual-checksum))
        (define checksum
          actual-checksum)
        (define pkg-format (filename-extension pkg))
@@ -410,10 +417,13 @@
                    (λ ()
                      (delete-directory/files package-path)))])
             orig-pkg))
-         (when (and (install-info-checksum info)
+         (when (and checksum
+                    (install-info-checksum info)
                     install:check-sums?
                     (not (equal? (install-info-checksum info) checksum)))
-           (error 'galaxy "Incorrect checksum on package: ~e" pkg))
+           (error 'galaxy "Incorrect checksum on package ~e: expected ~e, got ~e"
+                  pkg
+                  (install-info-checksum info) checksum))
          (update-install-info-checksum
           info
           checksum))]
@@ -450,26 +460,28 @@
        (error 'galaxy "~e is already installed" pkg-name)]
       [(and
         (not install:force?)
-        (for/or ([f (in-list (directory-list* pkg-dir))])
+        (for/or ([f (in-list (directory-list* pkg-dir))]
+                 #:unless (equal? f (build-path "METADATA.rktd")))
           (or
            ;; Compare with Racket
            (and (file-exists? (build-path (absolute-collects-dir) f))
-                "racket")
+                (cons "racket" f))
            ;; Compare with installed packages
            (for/or ([other-pkg (in-hash-keys db)])
              (define p (build-path (package-directory other-pkg) f))
              (and (file-exists? p)
-                  other-pkg))
+                  (cons other-pkg f)))
            ;; Compare with simultaneous installs
            (for/or ([other-pkg-info (in-list infos)]
                     #:unless (eq? other-pkg-info info))
              (define p (build-path (install-info-directory other-pkg-info) f))
              (and (file-exists? p)
-                  (install-info-name other-pkg-info))))))
+                  (cons (install-info-name other-pkg-info) f))))))
        =>
-       (λ (conflicting-pkg)
+       (λ (conflicting-pkg*file)
          (clean!)
-         (error 'galaxy "conflicts with ~e" conflicting-pkg))]
+         (match-define (cons conflicting-pkg file) conflicting-pkg*file)
+         (error 'galaxy "~e conflicts with ~e: ~e" pkg conflicting-pkg file))]
       [(and
         (not (eq? dep-behavior 'force))
         (let ()

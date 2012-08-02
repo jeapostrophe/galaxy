@@ -123,131 +123,130 @@
      '("planet-mcdonald-farm")))
 
 ;; Initialize the root on boot
-(module+ main
-  (define orig-pkg
-    (build-path root "orig-pkg"))
-  (make-directory* orig-pkg)
-  (define orig
-    (build-path root "orig"))
-  (make-directory* orig)
-  (define work
-    (build-path root "work"))
-  (make-directory* work)
-  (define pkg-depo
-    (build-path root "pkgs"))
-  (make-directory* pkg-depo)
-  (define pkg-depo-dir "static")
-  (make-directory* (build-path pkg-depo pkg-depo-dir))
+(define orig-pkg
+  (build-path root "orig-pkg"))
+(make-directory* orig-pkg)
+(define orig
+  (build-path root "orig"))
+(make-directory* orig)
+(define work
+  (build-path root "work"))
+(make-directory* work)
+(define pkg-depo
+  (build-path root "pkgs"))
+(make-directory* pkg-depo)
+(define pkg-depo-dir "static")
+(make-directory* (build-path pkg-depo pkg-depo-dir))
 
-  (define pkg-info-url (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
-  (define pkgs (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
-  (define planet-download-url
-    (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
+(define pkg-info-url (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
+(define pkgs (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
+(define planet-download-url
+  (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
 
-  (define all-pkg-list
-    (for/list ([p (in-list pkgs)])
-      (match-define (list user pkg (list maj min)) p)
-      (define dl-url
-        (struct-copy url planet-download-url
-                     [query
-                      (let ([get (lambda (access) (format "~s" access))])
-                        `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
-                          (name   . ,(get pkg))
-                          (maj    . ,(get maj))
-                          (min-lo . ,(get min))
-                          (min-hi . ,(get min))
-                          (path   . ,(get (list user)))))]))
-      (define pkg-short
-        (format "~a:~a:~a:~a" user maj min pkg))
+(define all-pkg-list
+  (for/list ([p (in-list pkgs)])
+    (match-define (list user pkg (list maj min)) p)
+    (define dl-url
+      (struct-copy url planet-download-url
+                   [query
+                    (let ([get (lambda (access) (format "~s" access))])
+                      `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
+                        (name   . ,(get pkg))
+                        (maj    . ,(get maj))
+                        (min-lo . ,(get min))
+                        (min-hi . ,(get min))
+                        (path   . ,(get (list user)))))]))
+    (define pkg-short
+      (format "~a:~a:~a:~a" user maj min pkg))
 
-      (define dest
-        (build-path orig-pkg pkg-short))
-      (unless (file-exists? dest)
-        (printf "Downloading ~a\n" pkg-short)
-        (call-with-output-file dest
-          (λ (out)
-            (call/input-url dl-url get-pure-port (λ (in) (copy-port in out))))))
+    (define dest
+      (build-path orig-pkg pkg-short))
+    (unless (file-exists? dest)
+      (printf "Downloading ~a\n" pkg-short)
+      (call-with-output-file dest
+        (λ (out)
+          (call/input-url dl-url get-pure-port (λ (in) (copy-port in out))))))
 
-      (define dest-dir
-        (build-path orig pkg-short))
-      (unless (directory-exists? dest-dir)
-        (printf "Unpacking ~a\n" pkg-short)
-        (make-directory dest-dir)
-        (local-require galaxy/util-plt)
-        (unplt dest dest-dir))
+    (define dest-dir
+      (build-path orig pkg-short))
+    (unless (directory-exists? dest-dir)
+      (printf "Unpacking ~a\n" pkg-short)
+      (make-directory dest-dir)
+      (local-require galaxy/util-plt)
+      (unplt dest dest-dir))
 
-      (define pkg/no-plt
-        (regexp-replace* #rx"\\.plt$" pkg ""))
-      (define pkg-name
-        (format "planet-~a-~a" user pkg/no-plt))
-      (define pkg-name.plt
-        (format "~a.plt" pkg-name))
-      (define pkg-dir
-        (build-path work pkg-name))
-      (with-handlers
-          ([exn? (λ (x)
-                   (delete-directory/files pkg-dir)
-                   (raise x))])
-        (unless (directory-exists? pkg-dir)
-          (printf "Translating ~a\n" pkg-short)
-          (make-directory* pkg-dir)
-          (define files-dir
-            (build-path pkg-dir user pkg/no-plt))
-          (make-directory* files-dir)
+    (define pkg/no-plt
+      (regexp-replace* #rx"\\.plt$" pkg ""))
+    (define pkg-name
+      (format "planet-~a-~a" user pkg/no-plt))
+    (define pkg-name.plt
+      (format "~a.plt" pkg-name))
+    (define pkg-dir
+      (build-path work pkg-name))
+    (with-handlers
+        ([exn? (λ (x)
+                 (delete-directory/files pkg-dir)
+                 (raise x))])
+      (unless (directory-exists? pkg-dir)
+        (printf "Translating ~a\n" pkg-short)
+        (make-directory* pkg-dir)
+        (define files-dir
+          (build-path pkg-dir user pkg/no-plt))
+        (make-directory* files-dir)
 
-          (define all-deps
-            (fold-files
-             (λ (p ty deps)
-               (define rp
-                 (find-relative-path dest-dir p))
-               (define fp
-                 (if (equal? p rp)
-                   files-dir
-                   (build-path files-dir rp)))
-               (match ty
-                 ['dir
-                  (make-directory* fp)
-                  deps]
-                 ['file
-                  (match (filename-extension rp)
-                    [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
-                     (printf "\t~a\n" rp)
-                     (define orig (file->bytes p))
-                     (define-values (changed new-deps)
-                       (update-planet-reqs orig))
-                     (display-to-file changed fp)
-                     (append new-deps deps)]
-                    [_
-                     (copy-file p fp)
-                     deps])]))
-             empty
-             dest-dir
-             #f))
-          (define deps
-            (remove pkg-name
-                    (remove-duplicates
-                     all-deps)))
+        (define all-deps
+          (fold-files
+           (λ (p ty deps)
+             (define rp
+               (find-relative-path dest-dir p))
+             (define fp
+               (if (equal? p rp)
+                 files-dir
+                 (build-path files-dir rp)))
+             (match ty
+               ['dir
+                (make-directory* fp)
+                deps]
+               ['file
+                (match (filename-extension rp)
+                  [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
+                   (printf "\t~a\n" rp)
+                   (define orig (file->bytes p))
+                   (define-values (changed new-deps)
+                     (update-planet-reqs orig))
+                   (display-to-file changed fp)
+                   (append new-deps deps)]
+                  [_
+                   (copy-file p fp)
+                   deps])]))
+           empty
+           dest-dir
+           #f))
+        (define deps
+          (remove pkg-name
+                  (remove-duplicates
+                   all-deps)))
 
-          (printf "\tdeps ~a\n" deps)
-          (write-to-file
-           `((dependency ,@deps))
-           (build-path pkg-dir "METADATA.rktd"))))
+        (printf "\tdeps ~a\n" deps)
+        (write-to-file
+         `((dependency ,@deps))
+         (build-path pkg-dir "METADATA.rktd"))))
 
-      (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
-      (unless (file-exists? pkg-pth)
-        (printf "Packaging ~a\n" pkg-short)
-        (parameterize ([current-directory work])
-          (system (format "raco pkg create ~a" pkg-name))
-          (rename-file-or-directory
-           (build-path work pkg-name.plt) pkg-pth)))
+    (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
+    (unless (file-exists? pkg-pth)
+      (printf "Packaging ~a\n" pkg-short)
+      (parameterize ([current-directory work])
+        (system (format "raco pkg create ~a" pkg-name))
+        (rename-file-or-directory
+         (build-path work pkg-name.plt) pkg-pth)))
 
-      pkg-name))
+    pkg-name))
 
-  (define pkg-list
-    ;; No idea why there are duplicates
-    (remove-duplicates all-pkg-list))
+(define pkg-list
+  ;; No idea why there are duplicates
+  (remove-duplicates all-pkg-list))
 
-  (define port 6319)
+(define (go port)
   (serve/servlet (galaxy-index/basic
                   (λ () pkg-list)
                   (λ (pkg-name)
@@ -263,3 +262,8 @@
                  (list pkg-depo)
                  #:servlet-regexp #rx""
                  #:port port))
+
+(provide go)
+
+(module+ main
+  (go 6319))

@@ -46,9 +46,8 @@
 
 ;; XXX cause raco setup to run on the new roots afterwards
 
-;; XXX planet compatibility server --
-;; http://planet.racket-lang.org/servlets/pkg-info.ss
-
 ;; XXX system installation tests (versus user)
 
 ;; XXX scour github for initial packages
+
+;; XXX setup deployed servers (main index + planet compat)
