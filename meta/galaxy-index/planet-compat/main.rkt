@@ -27,19 +27,28 @@
   (substring s st (+ (string-length s) end)))
 (define (remove-suffix s)
   (regexp-replace #rx"\\.([^\\.]*?)$" s ""))
-(define (convert-one-planet-req orig-bs)
+(define (convert-one-planet-req pkgs orig-bs)
   (define orig-bs-i (open-input-bytes orig-bs))
   (define-values (new-byte new-dep)
     (with-handlers ([exn?
                      (λ (x)
+                       (eprintf "skipping possible planet dep ~e because of exception ~e\n"
+                                orig-bs (exn-message x))
                        (define here (file-position orig-bs-i))
                        (file-position orig-bs-i 0)
                        (values (read-bytes here orig-bs-i)
-                               empty))])
+                               empty))]
+                    [list?
+                     (λ (x)
+                       (apply error x))])
       (define orig-v (read orig-bs-i))
       (define orig-r (p:spec->req orig-v #'error))
-      (define user (first (p:pkg-spec-path (p:request-full-pkg-spec orig-r))))
-      (define pkg (remove-suffix (p:pkg-spec-name (p:request-full-pkg-spec orig-r))))
+      (define spec (p:request-full-pkg-spec orig-r))
+      (define user (first (p:pkg-spec-path spec)))
+      (define pkg
+        (format "~a~a"
+                (remove-suffix (p:pkg-spec-name spec))
+                (verify-package-exists pkgs spec)))
       (values
        (string->bytes/utf-8
         (format "~a/~a/~a~a"
@@ -56,29 +65,32 @@
         (format "planet-~a-~a"
                 user pkg)))))
   (define-values (new-bytes new-deps)
-    (update-planet-reqs (port->bytes orig-bs-i)))
+    (update-planet-reqs pkgs (port->bytes orig-bs-i)))
   (values (bytes-append
            new-byte new-bytes)
           (append
            new-dep new-deps)))
 
-(define (update-planet-reqs orig)
+(define (update-planet-reqs pkgs orig)
   (match (regexp-match-positions #px#"\\(\\s*planet\\s+.*\\s*\\)" orig)
     [#f
      (values orig
              empty)]
     [(cons (cons start end) _)
      (define-values (new-bytes new-deps)
-       (convert-one-planet-req (subbytes orig start)))
+       (convert-one-planet-req pkgs (subbytes orig start)))
      (values (bytes-append (subbytes orig 0 start)
                            new-bytes)
              new-deps)]))
 
 (module+ test
   (require rackunit)
+  (define fake-pkgs
+    (list (list "mcdonald" "farm.plt" (list 1 0))
+          (list "mcdonald" "glue-factory.plt" (list 1 0))))
   (define-syntax-rule (p in exp-bs exp-deps)
     (let ()
-      (define-values (act-bs act-deps) (update-planet-reqs in))
+      (define-values (act-bs act-deps) (update-planet-reqs fake-pkgs in))
       (check-equal? act-bs exp-bs)
       (check-equal? act-deps exp-deps)))
 
@@ -86,41 +98,41 @@
      #"planet mcdonald/farm"
      '())
   (p #"(planet mcdonald/farm)"
-     #"mcdonald/farm/main"
-     '("planet-mcdonald-farm"))
+     #"mcdonald/farm1/main"
+     '("planet-mcdonald-farm1"))
   (p #"ababab (planet mcdonald/farm) ababab"
-     #"ababab mcdonald/farm/main ababab"
-     '("planet-mcdonald-farm"))
+     #"ababab mcdonald/farm1/main ababab"
+     '("planet-mcdonald-farm1"))
   (p #"(planet mcdonald/farm) (planet mcdonald/farm)"
-     #"mcdonald/farm/main mcdonald/farm/main"
-     '("planet-mcdonald-farm" "planet-mcdonald-farm"))
+     #"mcdonald/farm1/main mcdonald/farm1/main"
+     '("planet-mcdonald-farm1" "planet-mcdonald-farm1"))
   (p #"(planet mcdonald/farm) (planet mcdonald/glue-factory)"
-     #"mcdonald/farm/main mcdonald/glue-factory/main"
-     '("planet-mcdonald-farm" "planet-mcdonald-glue-factory"))
+     #"mcdonald/farm1/main mcdonald/glue-factory1/main"
+     '("planet-mcdonald-farm1" "planet-mcdonald-glue-factory1"))
   (p #"(planet mcdonald/farm/duck)"
-     #"mcdonald/farm/duck"
-     '("planet-mcdonald-farm"))
-  (p #"(planet mcdonald/farm:2)"
-     #"mcdonald/farm/main"
-     '("planet-mcdonald-farm"))
-  (p #"(planet mcdonald/farm:2:5)"
-     #"mcdonald/farm/main"
-     '("planet-mcdonald-farm"))
-  (p #"(planet mcdonald/farm:2:5/duck)"
-     #"mcdonald/farm/duck"
-     '("planet-mcdonald-farm"))
+     #"mcdonald/farm1/duck"
+     '("planet-mcdonald-farm1"))
+  (p #"(planet mcdonald/farm:1)"
+     #"mcdonald/farm1/main"
+     '("planet-mcdonald-farm1"))
+  (p #"(planet mcdonald/farm:1:5)"
+     #"mcdonald/farm1/main"
+     '("planet-mcdonald-farm1"))
+  (p #"(planet mcdonald/farm:1:5/duck)"
+     #"mcdonald/farm1/duck"
+     '("planet-mcdonald-farm1"))
   (p #"(planet mcdonald/farm/duck/quack)"
-     #"mcdonald/farm/duck/quack"
-     '("planet-mcdonald-farm"))
+     #"mcdonald/farm1/duck/quack"
+     '("planet-mcdonald-farm1"))
   (p #"(planet \"mcdonald/farm/duck/quack\")"
-     #"mcdonald/farm/duck/quack"
-     '("planet-mcdonald-farm"))
+     #"mcdonald/farm1/duck/quack"
+     '("planet-mcdonald-farm1"))
   (p #"(planet \"quack.rkt\" (\"mcdonald\" \"farm.plt\") \"duck\")"
-     #"mcdonald/farm/duck/quack"
-     '("planet-mcdonald-farm"))
+     #"mcdonald/farm1/duck/quack"
+     '("planet-mcdonald-farm1"))
   (p #"(planet \"quack.rkt\" (\"mcdonald\" \"farm.plt\") \"duck\" \"mallard\")"
-     #"mcdonald/farm/duck/mallard/quack"
-     '("planet-mcdonald-farm")))
+     #"mcdonald/farm1/duck/mallard/quack"
+     '("planet-mcdonald-farm1")))
 
 ;; Initialize the root on boot
 (define orig-pkg
@@ -143,125 +155,197 @@
 (define planet-download-url
   (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
 
+(define (verify-package-exists pkgs spec)
+  (or
+   (for/or ([p (in-list pkgs)])
+     (match-define (list user pkg (list max-maj min)) p)
+     (and (equal? (p:pkg-spec-name spec) pkg)
+          (equal? (p:pkg-spec-path spec) (list user))
+          (if (p:pkg-spec-maj spec)
+            (and
+             ;; This is too restrictive given the number of errors in Planet packages
+             (<= (p:pkg-spec-maj spec) max-maj)
+             (p:pkg-spec-maj spec))
+            max-maj)))
+   ;; Hacks
+   (let ()
+     (define hack-v
+       (list (p:pkg-spec-name spec)
+             (p:pkg-spec-path spec)
+             (p:pkg-spec-maj spec)))
+     (cond
+       [(member hack-v
+                (list
+                 ;; These packages straight-up don't exist
+                 '("displayz.plt" ("synx") #f) ;; from synx/xml-writer
+                 '("galore.plt" ("cce") 1) ;; from soegaard/galore (it's in a comment about avoiding collisions)
+                 '("combinators.plt" ("cce") 1) ;; from soegaard/galore (it's in a comment about avoiding collisions)
+                 ;; These are errors in a package's documnetation
+                 '("aspectscheme.plt" ("dutchyn") 4) ;; maj should be 1
+                 '("divascheme.plt" ("dyoo") 1) ;; user should be divascheme
+                 '("diff.plt" ("wmfarr") 1) ;; pkg should be deriv
+                 '("tetris.plt" ("dvanhorn") 5) ;; maj should be 3
+                 ;; These are from packages about planet features
+                 '("sqld-psql-ffi.plt" ("planet") 1)
+                 '("sqlid.plt" ("planet") 1)
+                 '("package-from-local-filesystem.plt" ("fake-author") 1)
+                 '("package-from-svn.plt" ("fake-author") 1)
+                 '("module.plt" ("package") #f)
+                 '("mcfly-scribble.plt" ("~A") #f)
+                 '("mcfly-expand.plt" ("~A") #f)
+                 '("bar.plt" ("untyped") 1)))
+        (error 'verify-package-exists "hack!")]
+       [else #f]))
+   ;; End Hacks
+   (raise (list 'verify-package-exists "Cannot determine newest major for ~e ~e"
+                spec
+                (list (p:pkg-spec-name spec)
+                      (p:pkg-spec-path spec)
+                      (p:pkg-spec-maj spec))))))
+
 (define all-pkg-list
   (for/list ([p (in-list pkgs)])
-    (match-define (list user pkg (list maj min)) p)
-    (define dl-url
-      (struct-copy url planet-download-url
-                   [query
-                    (let ([get (lambda (access) (format "~s" access))])
-                      `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
-                        (name   . ,(get pkg))
-                        (maj    . ,(get maj))
-                        (min-lo . ,(get min))
-                        (min-hi . ,(get min))
-                        (path   . ,(get (list user)))))]))
-    (define pkg-short
-      (format "~a:~a:~a:~a" user maj min pkg))
+    (match-define (list user pkg (list max-maj min)) p)
+    (for/list ([maj (in-range 1 (add1 max-maj))])
+      (let/ec esc
+        (define dl-url
+          (struct-copy url planet-download-url
+                       [query
+                        (let ([get (lambda (access) (format "~s" access))])
+                          `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
+                            (name   . ,(get pkg))
+                            (maj    . ,(get maj))
+                            (min-lo . "0" #;,(get min))
+                            (min-hi . "#f" #;,(get min))
+                            (path   . ,(get (list user)))))]))
+        (define pkg-short
+          (format "~a:~a:~a" user maj pkg))
 
-    (define dest
-      (build-path orig-pkg pkg-short))
-    (unless (file-exists? dest)
-      (printf "Downloading ~a\n" pkg-short)
-      (call-with-output-file dest
-        (λ (out)
-          (call/input-url dl-url get-pure-port (λ (in) (copy-port in out))))))
+        (define dest
+          (build-path orig-pkg pkg-short))
+        (unless (file-exists? dest)
+          (printf "Downloading ~a\n" pkg-short)
+          (define pkg-bs
+            (call/input-url dl-url get-impure-port
+                            (λ (in)
+                              (define hs (purify-port in))
+                              (when (string=? "404" (substring hs 9 12))
+                                (esc #f))
+                              (port->bytes in))))
+          (call-with-output-file dest
+            (λ (out) (write-bytes pkg-bs out))))
 
-    (define dest-dir
-      (build-path orig pkg-short))
-    (unless (directory-exists? dest-dir)
-      (printf "Unpacking ~a\n" pkg-short)
-      (make-directory dest-dir)
-      (local-require galaxy/util-plt)
-      (unplt dest dest-dir))
+        (define dest-dir
+          (build-path orig pkg-short))
+        (unless (directory-exists? dest-dir)
+          (printf "Unpacking ~a\n" pkg-short)
+          (make-directory dest-dir)
+          (local-require galaxy/util-plt)
+          (unplt dest dest-dir))
 
-    (define pkg/no-plt
-      (regexp-replace* #rx"\\.plt$" pkg ""))
-    (define pkg-name
-      (format "planet-~a-~a" user pkg/no-plt))
-    (define pkg-name.plt
-      (format "~a.plt" pkg-name))
-    (define pkg-dir
-      (build-path work pkg-name))
-    (with-handlers
-        ([exn? (λ (x)
-                 (delete-directory/files pkg-dir)
-                 (raise x))])
-      (unless (directory-exists? pkg-dir)
-        (printf "Translating ~a\n" pkg-short)
-        (make-directory* pkg-dir)
-        (define files-dir
-          (build-path pkg-dir user pkg/no-plt))
-        (make-directory* files-dir)
+        (define pkg/no-plt
+          (format "~a~a"
+                  (regexp-replace* #rx"\\.plt$" pkg "")
+                  maj))
+        (define pkg-name
+          (format "planet-~a-~a" user pkg/no-plt))
+        (define pkg-name.plt
+          (format "~a.plt" pkg-name))
+        (define pkg-dir
+          (build-path work pkg-name))
+        (with-handlers
+            ([exn? (λ (x)
+                     (delete-directory/files pkg-dir)
+                     (raise x))])
+          (unless (directory-exists? pkg-dir)
+            (printf "Translating ~a\n" pkg-short)
+            (make-directory* pkg-dir)
+            (define files-dir
+              (build-path pkg-dir user pkg/no-plt))
+            (make-directory* files-dir)
 
-        (define all-deps
-          (fold-files
-           (λ (p ty deps)
-             (define rp
-               (find-relative-path dest-dir p))
-             (define fp
-               (if (equal? p rp)
-                 files-dir
-                 (build-path files-dir rp)))
-             (match ty
-               ['dir
-                (make-directory* fp)
-                deps]
-               ['file
-                (match (filename-extension rp)
-                  [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
-                   (printf "\t~a\n" rp)
-                   (define orig (file->bytes p))
-                   (define-values (changed new-deps)
-                     (update-planet-reqs orig))
-                   (display-to-file changed fp)
-                   (append new-deps deps)]
-                  [_
-                   (copy-file p fp)
-                   deps])]))
-           empty
-           dest-dir
-           #f))
-        (define deps
-          (remove pkg-name
-                  (remove-duplicates
-                   all-deps)))
+            (define all-deps
+              (fold-files
+               (λ (p ty deps)
+                 (define rp
+                   (find-relative-path dest-dir p))
+                 (define fp
+                   (if (equal? p rp)
+                     files-dir
+                     (build-path files-dir rp)))
+                 (match ty
+                   ['dir
+                    (make-directory* fp)
+                    deps]
+                   ['file
+                    (match (filename-extension rp)
+                      [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
+                       (define orig (file->bytes p))
+                       (define-values (changed new-deps)
+                         (update-planet-reqs pkgs orig))
+                       (display-to-file changed fp)
+                       (append new-deps deps)]
+                      [_
+                       (copy-file p fp)
+                       deps])]))
+               empty
+               dest-dir
+               #f))
+            (define deps
+              (remove pkg-name
+                      (remove-duplicates
+                       all-deps)))
 
-        (printf "\tdeps ~a\n" deps)
-        (write-to-file
-         `((dependency ,@deps))
-         (build-path pkg-dir "METADATA.rktd"))))
+            (printf "\tdeps ~a\n" deps)
+            (write-to-file
+             `((dependency ,@deps))
+             (build-path pkg-dir "METADATA.rktd"))))
 
-    (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
-    (unless (file-exists? pkg-pth)
-      (printf "Packaging ~a\n" pkg-short)
-      (parameterize ([current-directory work])
-        (system (format "raco pkg create ~a" pkg-name))
-        (rename-file-or-directory
-         (build-path work pkg-name.plt) pkg-pth)))
+        (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
+        (unless (file-exists? pkg-pth)
+          (printf "Packaging ~a\n" pkg-short)
+          (parameterize ([current-directory work])
+            (system (format "raco pkg create ~a" pkg-name))
+            (rename-file-or-directory
+             (build-path work pkg-name.plt)
+             pkg-pth)
+            (rename-file-or-directory
+             (string-append (path->string (build-path work pkg-name.plt)) ".CHECKSUM")
+             (string-append (path->string pkg-pth) ".CHECKSUM"))))
 
-    pkg-name))
+        pkg-name))))
 
 (define pkg-list
   ;; No idea why there are duplicates
-  (remove-duplicates all-pkg-list))
+  (remove-duplicates
+   (filter-map (λ (x) x)
+               (append* all-pkg-list))))
 
 (define (go port)
-  (serve/servlet (galaxy-index/basic
-                  (λ () pkg-list)
-                  (λ (pkg-name)
-                    (and (directory-exists? (build-path work pkg-name))
-                         (hasheq 'checksum
-                                 (file->string
-                                  (build-path work (format "~a.plt.CHECKSUM" pkg-name)))
-                                 'source
-                                 (format "http://localhost:~a/~a/~a.plt"
-                                         port pkg-depo-dir pkg-name)))))
-                 #:command-line? #t
-                 #:extra-files-paths
-                 (list pkg-depo)
-                 #:servlet-regexp #rx""
-                 #:port port))
+  (serve/servlet
+   (galaxy-index/basic
+    (λ () pkg-list)
+    (λ (pkg-name)
+      (and
+       (directory-exists? (build-path work pkg-name))
+       (hasheq 'checksum
+               (file->string
+                (build-path pkg-depo pkg-depo-dir (format "~a.plt.CHECKSUM" pkg-name)))
+               'source
+               (format "http://localhost:~a/~a/~a.plt"
+                       port pkg-depo-dir pkg-name)
+               'url
+               (let ()
+                 (match-define (regexp #rx"^planet-([^-]+)-([^0-9]+)[0-9]+"
+                                       (list _ user pkg))
+                               pkg-name)
+                 (format "http://planet.racket-lang.org/display.ss?package=~a.plt&owner=~a"
+                         pkg user))))))
+   #:command-line? #t
+   #:extra-files-paths
+   (list pkg-depo)
+   #:servlet-regexp #rx""
+   #:port port))
 
 (provide go)
 

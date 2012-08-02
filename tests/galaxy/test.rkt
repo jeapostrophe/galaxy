@@ -49,8 +49,6 @@
 
 ;; XXX system installation tests (versus user)
 
-;; XXX planet compat - major versions
-
 ;; XXX scour github for initial packages
 
 ;; XXX setup deployed servers (main index + planet compat)

@@ -14,7 +14,7 @@
       (second pd)))
   (define (write-file file* content-p)
     (define file (path-descriptor->path file*))
-    (printf "\twriting ~a\n" file)
+    #;(printf "\twriting ~a\n" file)
     (with-output-to-file
         (build-path pkg-dir file)
       (λ () (copy-port content-p (current-output-port)))))
@@ -24,7 +24,7 @@
                     void
                     (λ (dir* _a)
                       (define dir (path-descriptor->path dir*))
-                      (printf "\tmaking ~a\n" dir)
+                      #;(printf "\tmaking ~a\n" dir)
                       (define new-dir
                         (build-path pkg-dir
                                     dir))
