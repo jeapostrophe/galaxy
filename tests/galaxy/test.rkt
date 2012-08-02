@@ -34,10 +34,6 @@
  "planet"
  "update-deps")
 
-;; XXX update should deal with new deps correctly [* meaning
-;; should leave the old version in place if they are not
-;; available]
-
 ;; XXX if you update an auto dependency, it should still be considered
 ;; an auto dependency after the fact
 
