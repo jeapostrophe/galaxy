@@ -29,7 +29,8 @@
   "create packages"
   $ "raco pkg create test-pkgs/pkg-b-first"
   $ "raco pkg create test-pkgs/pkg-b-second"
-  $ "raco pkg create test-pkgs/pkg-a-first")
+  $ "raco pkg create test-pkgs/pkg-a-first"
+  $ "raco pkg create test-pkgs/pkg-a-second")
 
  (with-fake-root
   (shelly-case
@@ -69,4 +70,20 @@
    (init-update-deps-test)
    $ "raco pkg update --deps search-auto pkg-b" =exit> 0 <input= "y\n"
    $ "racket -e '(require pkg-b)'" =exit> 43
-   $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0)))
+   $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0))
+
+ (with-fake-root
+  (shelly-case
+   "update a dependency"
+   (init-update-deps-test)
+   $ "raco pkg update --deps search-auto pkg-b" =exit> 0 <input= "y\n"
+   $ "racket -e '(require pkg-b)'" =exit> 43
+   $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0
+   (hash-set! *index-ht-1* "pkg-a"
+              (hasheq 'checksum
+                      (file->string "test-pkgs/pkg-a-second.plt.CHECKSUM")
+                      'source
+                      "http://localhost:9999/pkg-a-second.plt"))
+   $ "raco pkg update pkg-a" =exit> 0
+   $ "racket -e '(require pkg-b)'" =exit> 43
+   $ "racket -e '(require pkg-b/contains-dep)'" =exit> 43)))

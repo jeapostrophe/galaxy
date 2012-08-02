@@ -31,10 +31,8 @@
  "deps" "update" "remove"
  "locking" "overwrite"
  "config"
- "planet")
-
-;; XXX update should allow updates to thing that are dependencies
-;; of other things
+ "planet"
+ "update-deps")
 
 ;; XXX update should deal with new deps correctly [* meaning
 ;; should leave the old version in place if they are not
