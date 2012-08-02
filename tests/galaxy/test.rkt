@@ -51,6 +51,8 @@
 
 ;; XXX scour github for initial packages
 
+;; XXX make main social server
+
 ;; XXX setup deployed servers (main index + planet compat)
 
 ;; XXX update planet test for real compat server address
