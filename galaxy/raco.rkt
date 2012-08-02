@@ -71,6 +71,7 @@
            "--strip-components" (number->string strip-components)))
 
 (define (call/input-url+200 u fun)
+  (printf "\t\tReading ~a\n" (url->string u))
   (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
   (and (string=? "200" (substring hs 9 12))
        (fun ip)))
@@ -269,8 +270,11 @@
              (set->list deps-to-be-removed))))
   (for-each remove-package pkgs))
 
-(define (install-packages #:dep-behavior [dep-behavior #f]
-                          auto+pkgs)
+(define (install-packages
+         #:pre-succeed [pre-succeed void]
+         #:dep-behavior [dep-behavior #f]
+         #:updating? [updating? #f]
+         auto+pkgs)
   (define (install-package pkg
                            #:pkg-name [given-pkg-name #f])
     (define pkg-url (and (string? pkg) (string->url pkg)))
@@ -450,7 +454,7 @@
     (define simultaneous-installs
       (list->set (map install-info-name infos)))
     (cond
-      [(package-info pkg-name #f)
+      [(and (not updating?) (package-info pkg-name #f))
        (clean!)
        (error 'galaxy "~e is already installed" pkg-name)]
       [(and
@@ -462,7 +466,8 @@
            (and (file-exists? (build-path (absolute-collects-dir) f))
                 (cons "racket" f))
            ;; Compare with installed packages
-           (for/or ([other-pkg (in-hash-keys db)])
+           (for/or ([other-pkg (in-hash-keys db)]
+                    #:unless (and updating? (equal? other-pkg pkg-name)))
              (define p (build-path (package-directory other-pkg) f))
              (and (file-exists? p)
                   (cons other-pkg f)))
@@ -547,14 +552,22 @@
     (map install-package (map cdr auto+pkgs)))
   (define do-its
     (map (curry install-package/outer infos) auto+pkgs infos))
+  (pre-succeed)
   (for-each (λ (t) (t)) do-its))
 
-(define (install-cmd #:dep-behavior [dep-behavior #f] pkgs)
+(define (install-cmd pkgs
+                     #:pre-succeed [pre-succeed void]
+                     #:dep-behavior [dep-behavior #f]
+                     #:updating? [updating? #f])
   (with-handlers ([list?
                    (λ (deps)
                      (install-cmd #:dep-behavior dep-behavior
+                                  #:pre-succeed pre-succeed
+                                  #:updating? updating?
                                   (append (map (curry cons #t) deps) pkgs)))])
     (install-packages #:dep-behavior dep-behavior
+                      #:pre-succeed pre-succeed
+                      #:updating? updating?
                       pkgs)))
 
 (define (update-is-possible? pkg-name)
@@ -589,7 +602,9 @@
   (define meta (file->value* (build-path pkg-dir "METADATA.rktd") empty))
   (dict-ref meta 'dependency empty))
 
-(define (update-packages in-pkgs #:deps? [deps? #f])
+(define (update-packages in-pkgs
+                         #:dep-behavior [dep-behavior #f]
+                         #:deps? [deps? #f])
   (define pkgs
     (cond
       [(empty? in-pkgs)
@@ -605,8 +620,11 @@
     [(empty? to-update)
      (printf "No updates available\n")]
     [else
-     (for-each (compose remove-package car) to-update)
-     (install-cmd (map (curry cons #f) (map cdr to-update)))]))
+     (install-cmd
+      #:updating? #t
+      #:pre-succeed (λ () (for-each (compose remove-package car) to-update))
+      #:dep-behavior dep-behavior
+      (map (curry cons #f) (map cdr to-update)))]))
 
 (define update:deps? #f)
 (define remove:force? #f)
@@ -643,10 +661,20 @@
   ["update"       "Update packages"
    "Update packages"
    #:once-each
-   ["--deps" "Check named packages' dependencies for updates"
+   ["--deps" dep-behavior
+    ("Specify the behavior for dependencies."
+     "Options are: fail, force, search-ask, search-auto."
+     "  'fail' cancels the installation if dependencies are unmet (default for most packages)."
+     "  'force' installs the package despite missing dependencies."
+     "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
+     "  'search-auto' is like 'search-auto' but does not ask for permission to install.")
+    (set! install:dep-behavior (string->symbol dep-behavior))]
+   ["--update-deps" "Check named packages' dependencies for updates"
     (set! update:deps? #t)]
    #:args pkgs
-   (update-packages pkgs #:deps? update:deps?)]
+   (update-packages pkgs
+                    #:dep-behavior install:dep-behavior
+                    #:deps? update:deps?)]
   ["remove"       "Remove packages"
    "Remove packages"
    #:once-each

@@ -33,8 +33,6 @@
  "config"
  "planet")
 
-;; XXX update should support different dep-behavior (like install)
-
 ;; XXX update should allow updates to thing that are dependencies
 ;; of other things
 

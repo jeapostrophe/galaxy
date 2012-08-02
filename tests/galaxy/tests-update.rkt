@@ -50,11 +50,11 @@
                      "http://localhost:9999/update-test/galaxy-test1.zip"
                      "galaxy-test1"
                      $ "raco pkg install test-pkgs/galaxy-test2.zip"
-                     $ "raco pkg update --deps galaxy-test2" =exit> 0 =stdout> "No updates available\n"
+                     $ "raco pkg update --update-deps galaxy-test2" =exit> 0 =stdout> "No updates available\n"
                      $ "racket -e '(require galaxy-test1/update)'" =exit> 42
                      $ "cp -f test-pkgs/galaxy-test1-v2.zip test-pkgs/update-test/galaxy-test1.zip"
                      $ "cp -f test-pkgs/galaxy-test1-v2.zip.CHECKSUM test-pkgs/update-test/galaxy-test1.zip.CHECKSUM"
-                     $ "raco pkg update --deps galaxy-test2" =exit> 0
+                     $ "raco pkg update --update-deps galaxy-test2" =exit> 0
                      $ "racket -e '(require galaxy-test1/update)'" =exit> 43
                      $ "raco pkg remove galaxy-test2")
     (finally
