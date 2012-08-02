@@ -32,7 +32,8 @@
  "locking" "overwrite"
  "config"
  "planet"
- "update-deps")
+ "update-deps"
+ "update-auto")
 
 ;; XXX if you update an auto dependency, it should still be considered
 ;; an auto dependency after the fact

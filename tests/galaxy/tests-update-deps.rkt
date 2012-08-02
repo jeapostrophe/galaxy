@@ -69,7 +69,7 @@
   (shelly-case
    "search-auto"
    (init-update-deps-test)
-   $ "raco pkg update --deps search-auto pkg-b" =exit> 0 <input= "y\n"
+   $ "raco pkg update --deps search-auto pkg-b" =exit> 0
    $ "racket -e '(require pkg-b)'" =exit> 43
    $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0))
 
@@ -77,7 +77,7 @@
   (shelly-case
    "update a dependency"
    (init-update-deps-test)
-   $ "raco pkg update --deps search-auto pkg-b" =exit> 0 <input= "y\n"
+   $ "raco pkg update --deps search-auto pkg-b" =exit> 0
    $ "racket -e '(require pkg-b)'" =exit> 43
    $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0
    (hash-set! *index-ht-1* "pkg-a"
@@ -95,7 +95,7 @@
   (shelly-case
    "update a dependency (and fail) but still work"
    (init-update-deps-test)
-   $ "raco pkg update --deps search-auto pkg-b" =exit> 0 <input= "y\n"
+   $ "raco pkg update --deps search-auto pkg-b" =exit> 0
    $ "racket -e '(require pkg-b)'" =exit> 43
    $ "racket -e '(require pkg-b/contains-dep)'" =exit> 0
    (hash-set! *index-ht-1* "pkg-a"
