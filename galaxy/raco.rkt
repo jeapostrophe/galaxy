@@ -72,13 +72,8 @@
 
 (define (call/input-url+200 u fun)
   (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
-  (and
-   (string=? "200"
-             (second
-              ;; XXX This is a little inefficient, because we just
-              ;; want the second word
-              (string-split hs)))
-   (fun ip)))
+  (and (string=? "200" (substring hs 9 12))
+       (fun ip)))
 (define (download-file! url file #:fail-okay? [fail-okay? #f])
   (with-handlers
       ([exn:fail?
