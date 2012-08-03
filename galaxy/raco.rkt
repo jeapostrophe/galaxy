@@ -580,7 +580,7 @@
   (not (member ty '(link dir file))))
 
 (define (update-package pkg-name)
-  (match-define (pkg-info orig-pkg checksum _)
+  (match-define (pkg-info orig-pkg checksum auto?)
                 (package-info pkg-name))
   (match orig-pkg
     [`(link ,_)
@@ -598,7 +598,7 @@
        (remote-package-checksum orig-pkg))
      (and new-checksum
           (not (equal? checksum new-checksum))
-          (cons pkg-name orig-pkg-desc))]))
+          (cons pkg-name (cons auto? orig-pkg-desc)))]))
 
 (define (package-dependencies pkg-name)
   (define pkg-dir (package-directory pkg-name))
@@ -627,8 +627,7 @@
       #:updating? #t
       #:pre-succeed (λ () (for-each (compose remove-package car) to-update))
       #:dep-behavior dep-behavior
-      ;; XXX this #f should be whatever it was before
-      (map (curry cons #f) (map cdr to-update)))]))
+      (map cdr to-update))]))
 
 (define update:deps? #f)
 (define remove:force? #f)

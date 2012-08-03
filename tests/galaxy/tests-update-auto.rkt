@@ -67,5 +67,5 @@
    $ "racket -e '(require pkg-b)'" =exit> 1
    ;; pkg-a is now not needed
    $ "raco pkg remove --auto"
-   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\n\n"
+   $ "raco pkg show" =stdout> "Package(auto?)    Checksum    Source\n"
    $ "racket -e '(require pkg-a)'" =exit> 1)))

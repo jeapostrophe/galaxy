@@ -35,9 +35,6 @@
  "update-deps"
  "update-auto")
 
-;; XXX if you update an auto dependency, it should still be considered
-;; an auto dependency after the fact
-
 ;; XXX cause raco setup to run on the new roots afterwards
 
 ;; XXX system installation tests (versus user)
