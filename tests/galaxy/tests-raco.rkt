@@ -3,9 +3,6 @@
          "util.rkt")
 
 (pkg-tests
- (shelly-case
-  "create packages")
-
  (with-fake-root
   (shelly-case
    "raco install/update uses raco setup"
