@@ -1,5 +1,6 @@
 #lang racket/base
 (require rackunit
+         racket/port
          racket/system
          unstable/debug
          racket/match
@@ -58,10 +59,12 @@
                   (printf "$ ~a\n" cmd)
                   (match-define
                    (list stdout stdin pid stderr to-proc)
-                   (process/ports output-port
+                   (process/ports #f
                                   (and input-str (open-input-string input-str))
-                                  error-port
+                                  #f
                                   cmd))
+                  (thread (λ () (copy-port stdout output-port (current-output-port))))
+                  (thread (λ () (copy-port stderr error-port (current-error-port))))
                   (to-proc 'wait)
                   (define cmd-status (to-proc 'exit-code))
                   (when stdout (close-input-port stdout))
@@ -69,10 +72,8 @@
                   (when stdin (close-output-port stdin))
                   (define actual-output
                     (get-output-string output-port))
-                  (display actual-output)
                   (define actual-error
                     (get-output-string error-port))
-                  (display actual-error (current-error-port))
                   #,(syntax/loc #'command-line
                       (when output-str
                         (check-similar? actual-output output-str "stdout")))

@@ -33,9 +33,8 @@
  "config"
  "planet"
  "update-deps"
- "update-auto")
-
-;; XXX cause raco setup to run on the new roots afterwards
+ "update-auto"
+ "raco")
 
 ;; XXX system installation tests (versus user)
 

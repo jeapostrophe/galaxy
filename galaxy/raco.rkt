@@ -571,7 +571,8 @@
     (install-packages #:dep-behavior dep-behavior
                       #:pre-succeed pre-succeed
                       #:updating? updating?
-                      pkgs)))
+                      pkgs)
+    (system "raco setup")))
 
 (define (update-is-possible? pkg-name)
   (match-define (pkg-info orig-pkg checksum _)
@@ -686,7 +687,8 @@
    ["--auto" "Remove automatically installed packages with no dependencies"
     (set! remove:auto? #t)]
    #:args pkgs
-   (remove-packages pkgs)]
+   (begin (remove-packages pkgs)
+          (system "raco setup"))]
   ["show"         "Show information about installed packages"
    "Show information about installed packages"
    #:args ()
