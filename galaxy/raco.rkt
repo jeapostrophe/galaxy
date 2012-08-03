@@ -248,7 +248,10 @@
     (if remove:auto?
       (set->list
        (set-subtract
-        all-pkgs-set
+        (list->set
+         (filter 
+          (λ (p) (pkg-info-auto? (hash-ref db p)))
+          all-pkgs))
         (list->set
          (append-map package-dependencies
                      all-pkgs))))
@@ -624,6 +627,7 @@
       #:updating? #t
       #:pre-succeed (λ () (for-each (compose remove-package car) to-update))
       #:dep-behavior dep-behavior
+      ;; XXX this #f should be whatever it was before
       (map (curry cons #f) (map cdr to-update)))]))
 
 (define update:deps? #f)
