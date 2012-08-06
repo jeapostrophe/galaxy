@@ -92,8 +92,12 @@
          url
          (λ (ip) (copy-port ip op)))))))
 
+(define system-wide-install? #f)
 (define (pkg-dir)
-  (build-path (find-system-path 'addon-dir) "pkgs"))
+  (build-path (if system-wide-install?
+                (find-lib-dir)
+                (find-system-path 'addon-dir))
+              "pkgs"))
 (define (pkg-config-file)
   (build-path (pkg-dir) "config.rktd"))
 (define (pkg-db-file)
@@ -230,12 +234,12 @@
     [`(link ,_)
      (links pkg-dir
             #:remove? #t
-            #:user? #t
+            #:user? (not system-wide-install?)
             #:root? #t)]
     [_
      (links pkg-dir
             #:remove? #t
-            #:user? #t
+            #:user? (not system-wide-install?)
             #:root? #t)
      (delete-directory/files pkg-dir)]))
 
@@ -546,7 +550,7 @@
               pkg-dir]))
          (dprintf "creating link to ~e" final-pkg-dir)
          (links final-pkg-dir
-                #:user? #t
+                #:user? (not system-wide-install?)
                 #:root? #t)
          (define this-pkg-info
            (pkg-info orig-pkg checksum auto?))
@@ -642,6 +646,8 @@
  ["install"      "Install packages"
   "Install packages"
   #:once-each
+  [("-i" "--installation") "Operate on the installation-wide package database"
+   (set! system-wide-install? #t)]
   ["--deps" dep-behavior
    ("Specify the behavior for dependencies."
     "Options are: fail, force, search-ask, search-auto."
@@ -666,6 +672,8 @@
  ["update"       "Update packages"
   "Update packages"
   #:once-each
+  [("-i" "--installation") "Operate on the installation-wide package database"
+   (set! system-wide-install? #t)]
   ["--deps" dep-behavior
    ("Specify the behavior for dependencies."
     "Options are: fail, force, search-ask, search-auto."
@@ -684,6 +692,8 @@
  ["remove"       "Remove packages"
   "Remove packages"
   #:once-each
+  [("-i" "--installation") "Operate on the installation-wide package database"
+   (set! system-wide-install? #t)]
   ["--force" "Force removal of packages"
    (set! remove:force? #t)]
   ["--auto" "Remove automatically installed packages with no dependencies"
@@ -694,6 +704,9 @@
           (system "raco setup")))]
  ["show"         "Show information about installed packages"
   "Show information about installed packages"
+  #:once-each
+  [("-i" "--installation") "Operate on the installation-wide package database"
+   (set! system-wide-install? #t)]
   #:args ()
   (with-package-lock
    (let ()
@@ -713,6 +726,9 @@
                (format "~a" orig-pkg)))))))]
  ["config"         "View and modify the package configuration"
   "View and modify the package configuration"
+  #:once-each
+  [("-i" "--installation") "Operate on the installation-wide package database"
+   (set! system-wide-install? #t)]
   #:once-any
   [("--set") "Completely replace the value"
    (set! config:set #t)]

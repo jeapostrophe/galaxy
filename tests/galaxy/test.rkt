@@ -36,8 +36,6 @@
  "update-auto"
  "raco")
 
-;; XXX system installation tests (versus user) (find-lib-dir)
-
 ;; XXX scour github for initial packages
 
 ;; XXX make main social server
