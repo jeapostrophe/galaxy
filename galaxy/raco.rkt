@@ -12,6 +12,7 @@
          setup/link
          setup/pack
          setup/unpack
+         setup/dirs
          racket/port
          racket/list
          racket/function
@@ -127,7 +128,7 @@
 
 (define (remote-package-checksum pkg)
   (match pkg
-    [`(pis ,pkg-name)
+    [`(pns ,pkg-name)
      (hash-ref (package-index-lookup pkg-name) 'checksum)]
     [`(url ,pkg-url-str)
      (define pkg-url
@@ -442,7 +443,7 @@
         (update-install-info-checksum
          info
          checksum)
-        `(pis ,pkg))]))
+        `(pns ,pkg))]))
   (define db (read-pkg-db))
   (define (install-package/outer infos auto+pkg info)
     (match-define (cons auto? pkg)
@@ -450,7 +451,7 @@
     (match-define
      (install-info pkg-name orig-pkg pkg-dir clean? checksum)
      info)
-    (define pis? (eq? 'pis (first orig-pkg)))
+    (define pns? (eq? 'pns (first orig-pkg)))
     (define (clean!)
       (when clean?
         (delete-directory/files pkg-dir)))
@@ -502,7 +503,7 @@
          (clean!)
          (match
              (or dep-behavior
-                 (if pis?
+                 (if pns?
                    'search-ask
                    'fail))
            ['fail

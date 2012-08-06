@@ -58,14 +58,14 @@ implementation and its use simple.
    the checksum is the commit and otherwise treated as a directory
    URL, modulo not needing a MANIFEST. 
 
-   A package indexing service --- An HTTP RESTful protocol is used to
+   A package name service --- An HTTP RESTful protocol is used to
    determine all information.
-** How do I know about a PIS?
+** How do I know about a PNS?
    There is a default one run by PLT. It will have a very simple
    protocol that anyone could implement easily, and we will provide a
    basic implementation that someone could deploy locally.
 
-   Each user will have a sorted list of PISs
+   Each user will have a sorted list of PNSs
 ** How dependencies are dealt with
    A package lists its dependencies by name. If they are not
    installed, there are three options
@@ -74,15 +74,15 @@ implementation and its use simple.
 
    'force - The installation is forced
 
-   'search - The dependencies are search for on the PIS
+   'search - The dependencies are search for on the PNS
 
-   The default will be 'search for installations from the PIS and
+   The default will be 'search for installations from the PNS and
    'fail for all other installations.
 ** Where do I find out about packages?
-   The official PIS will additionally present an human interface on
+   The official PNS will additionally present an human interface on
    the package database.
 +
-   The PIS will reserve all packages matching #rx"^racket.*"
+   The PNS will reserve all packages matching #rx"^racket.*"
    and #rx"^plt.*" for use by PLT.
 
    It will define a special set of metadata and rules about them.
@@ -123,22 +123,22 @@ implementation and its use simple.
    'tags - A list of strings that can be added to by anyone and
    removed by only the author and PLT
 
-   Updated by the PIS only:
+   Updated by the PNS only:
 
    'last-update - The last time the package was modified
 
    'live - True if the package source URL is accessible
 
 ** Security & verification of package contents
-   Since the PIS does not store the contents of packages, the client
-   will verify the checksum given by the PIS versus the checksum of
+   Since the PNS does not store the contents of packages, the client
+   will verify the checksum given by the PNS versus the checksum of
    the data provided by the package content source. If there is a
    mismatch, an attack is assumed to be underway.
 
-   All data from the PIS will be signed with the private part of a
+   All data from the PNS will be signed with the private part of a
    key-pair.
 
-   The public key of the official PIS will come with every Racket
+   The public key of the official PNS will come with every Racket
    install.
 ** Updating packages (client)
    When updating a package, the original source is consulted for a new
@@ -176,15 +176,15 @@ implementation and its use simple.
    If the developer is using git, then all pushes will automatically
    result in a new package checksum, contents, etc.
 
-   The official PIS will periodically poll all packages for updates,
+   The official PNS will periodically poll all packages for updates,
    perhaps every day, but an author can manually request a poll at any
-   time. The PIS will not poll on behalf of a client, ever.
+   time. The PNS will not poll on behalf of a client, ever.
 
-   Thus, a developer using git can inform the PIS about a package a
+   Thus, a developer using git can inform the PNS about a package a
    single time and never go back to the site and users will always get
    the most recent versions.
 ** Integration with DrDr
-   Packages that the official PIS marks as trusted will be
+   Packages that the official PNS marks as trusted will be
    automatically checked by DrDr. If the author is not responsive to
    conditions found by the DrDr, then trusted status will be revoked.
 ** Other trusted notes
@@ -212,7 +212,7 @@ implementation and its use simple.
    The core distribution will be very small but will ship with a set
    of default packages that will automatically be installed (or
    pre-installed in the image.) This set will be decided by PLT and
-   will be be reflected in an OPIS flag.
+   will be be reflected in an OPNS flag.
 ** Custom distribution creation
    We will offer a site where users can assemble their own
    distributions by checking off boxes for packages. This will produce

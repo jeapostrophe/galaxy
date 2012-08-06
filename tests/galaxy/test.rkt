@@ -36,7 +36,7 @@
  "update-auto"
  "raco")
 
-;; XXX system installation tests (versus user)
+;; XXX system installation tests (versus user) (find-lib-dir)
 
 ;; XXX scour github for initial packages
 
@@ -47,3 +47,7 @@
 ;; XXX update planet test for real compat server address
 
 ;; XXX test real main index
+
+;; XXX email adm a basic thing
+
+;; XXX email dev about deployment

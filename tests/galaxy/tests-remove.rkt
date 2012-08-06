@@ -59,12 +59,12 @@
      $ "racket -e '(require galaxy-test1)'" =exit> 1
      $ "racket -e '(require galaxy-test2)'" =exit> 1
      $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
-     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pis galaxy-test1)\ngalaxy-test2      a465fd3a36431ddfc518a4551de9b7387cf464c8    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip)\n"
+     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pns galaxy-test1)\ngalaxy-test2      a465fd3a36431ddfc518a4551de9b7387cf464c8    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip)\n"
      $ "racket -e '(require galaxy-test1)'" =exit> 0
      $ "racket -e '(require galaxy-test2)'" =exit> 0
      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
      $ "raco pkg remove galaxy-test2"
-     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pis galaxy-test1)\n"
+     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pns galaxy-test1)\n"
      $ "racket -e '(require galaxy-test1)'" =exit> 0
      $ "raco pkg remove --auto"
      $ "raco pkg show" =stdout> "Package(auto?)    Checksum    Source\n"
