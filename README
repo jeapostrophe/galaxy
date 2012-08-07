@@ -233,6 +233,16 @@ implementation and its use simple.
 
    user -> system conflicts: how to ensure that the admin doesn't
    break things in the future?
+
+   This will likely be a sticking point, but I imagine that most users
+   will stick with one... a course will use the system and the
+   students are unlikely to install anything. Most users will stick
+   with their own individual installs, etc.
+
+   The worst case will be its interaction with the distribution of
+   packages on install. I think the solution is to ship with the .plt
+   files and have the install run, so they get put in the right
+   places, rather than having them "pre installed"
 ** TODO Remove discussion of single collect packages, instead just fork for existing githubs
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
