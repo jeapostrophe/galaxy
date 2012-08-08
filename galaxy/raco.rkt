@@ -71,11 +71,6 @@
   (system* (find-executable-path "tar") "-C" pkg-dir "-xvzf" pkg
            "--strip-components" (number->string strip-components)))
 
-(define (call/input-url+200 u fun)
-  (printf "\t\tReading ~a\n" (url->string u))
-  (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
-  (and (string=? "200" (substring hs 9 12))
-       (fun ip)))
 (define (download-file! url file #:fail-okay? [fail-okay? #f])
   (with-handlers
       ([exn:fail?
@@ -154,8 +149,7 @@
           (and (equal? (hash-ref b 'name) (string->symbol branch))
                (hash-ref (hash-ref b 'commit) 'sha)))]
        [_
-        (call/input-url+200 (string->url (string-append pkg-url-str ".CHECKSUM"))
-                            port->string)])]))
+        (package-url->checksum pkg-url-str)])]))
 
 (define (read-file-hash file)
   (define the-db

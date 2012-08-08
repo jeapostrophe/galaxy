@@ -243,6 +243,7 @@ implementation and its use simple.
    packages on install. I think the solution is to ship with the .plt
    files and have the install run, so they get put in the right
    places, rather than having them "pre installed"
+** TODO Make Planet compat update when new minor versions are available.
 ** TODO Remove discussion of single collect packages, instead just fork for existing githubs
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
