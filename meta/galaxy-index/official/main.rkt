@@ -7,10 +7,14 @@
          galaxy/util
          racket/match
          racket/package
+         racket/system
          web-server/servlet
+         web-server/formlets
          racket/bool
          racket/list
-         meta/galaxy-index/basic/main)
+         meta/galaxy-index/basic/main
+         "gravatar.rkt"
+         "id-cookie.rkt")
 
 (define-syntax-rule (while cond e ...)
   (let loop ()
@@ -20,17 +24,26 @@
 
 (define-runtime-path root "root")
 (make-directory* root)
-(define db (build-path root "db"))
-(make-directory* db)
+(define secret-key
+  (let ()
+    (define secret-key-path
+      (build-path root "secret.key"))
+    (unless (file-exists? secret-key-path)
+      (system (format "openssl rand -out ~a -hex 64" secret-key-path)))
+    (file->bytes secret-key-path)))
+(define users-path (build-path root "users"))
+(make-directory* users-path)
+(define pkgs-path (build-path root "pkgs"))
+(make-directory* pkgs-path)
 
 ;; XXX Add a caching system
 (define (package-list)
-  (sort (map path->string (directory-list db))
+  (sort (map path->string (directory-list pkgs-path))
         string-ci<=?))
 (define (package-info pkg-name)
-  (file->value (build-path db pkg-name)))
+  (file->value (build-path pkgs-path pkg-name)))
 (define (package-info-set! pkg-name i)
-  (write-to-file (build-path db pkg-name) i))
+  (write-to-file (build-path pkgs-path pkg-name) i))
 (define (package-ref pkg-info key)
   (hash-ref pkg-info key
             (match key
@@ -102,24 +115,81 @@
   (template
    (list "Packages")
    ;; XXX display the current search terms
-   ;; XXX change this text based on whether you are logged in
    `(a ([href ,(main-url page/manage)])
-       "Manage Your Packages")
+       ,(if (current-user req #f)
+          "Manage Your Packages"
+          "Contribute a Package"))
    (package-table page/info pkgs)))
 
 (define (page/login req)
-  (template
-   (list "Login")
-   ....))
+  (login req)
+  (redirect-to (main-url page/main)))
 
-(define (current-user)
-  ....
-  ;; If not logged in:
-  (redirect-to (main-url page/login))
-  ....)
+(define (login req [last-error #f])
+  ;; XXX give ability to create an account
+  ;; XXX look nice
+  (define login-formlet
+    (formlet
+     (table
+      (tr (td "Email Address:")
+          (td  ,{(to-string (required (text-input))) . => . email}))
+      (tr (td "Password:")
+          (td ,{(to-string (required (password-input))) . => . passwd})))
+     (values email passwd)))
+  (define log-req
+    (send/suspend
+     (λ (k-url)
+       (template
+        (list "Login")
+        `(div ([id "login"])
+              (form ([action ,k-url] [method "post"])
+                    ,@(formlet-display login-formlet)
+                    (input ([type "submit"] [value "Log in"])))
+              (p "If you enter an unclaimed email address, then an account will be created.")
+              ,@(if last-error
+                  `((h1 ([class "error"]) ,last-error))
+                  '()))))))
+  (define-values
+    (email passwd)
+    (formlet-process login-formlet log-req))
 
-(define (package-list/mine)
-  (define u (current-user))
+  (define (authenticated!)
+    (redirect/get
+     #:headers
+     (list
+      (cookie->header
+       (make-id-cookie secret-key email)))))
+
+  ;; XXX worry about email containing /s
+  (define password-path (build-path users-path email))
+
+  (cond
+    [(not (file-exists? password-path))
+     ....
+     
+     ....
+     
+
+     (authenticated!)]
+    [(not (bytes=? passwd (file->bytes password-path)))
+     (login req (format "The given password is incorrect for email address ~e"
+                        email))]
+    [else
+     (authenticated!)]))
+
+(define (current-user req required?)
+  (define id
+    (request-valid-id-cookie secret-key req))
+  (cond
+    [id
+     id]
+    [required?
+     (current-user (login req) required?)]
+    [else
+     #f]))
+
+(define (package-list/mine req)
+  (define u (current-user req #t))
   (package-list/search (list (format "author:~a" u))))
 
 (define (package-table page/package pkgs)
@@ -139,7 +209,7 @@
           (td ,@(package-ref i 'tags))))))
 
 (define (page/manage req)
-  (define pkgs (package-list/mine))
+  (define pkgs (package-list/mine req))
   (template
    (list "Manage My Packages")
    `(a ([href ,(main-url page/manage/upload)])
@@ -162,7 +232,7 @@
 
 (define (page/manage/update req)
   (update-checksums
-   (package-list/mine))
+   (package-list/mine req))
   (redirect-to (main-url page/manage)))
 
 (define (update-checksums pkgs)
@@ -191,6 +261,7 @@
 (define basic-start
   (galaxy-index/basic package-list package-info))
 
+;; XXX only run with ssl
 (define (go port)
   (thread
    (λ ()
