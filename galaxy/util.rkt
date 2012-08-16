@@ -28,7 +28,7 @@
 
 (define (call/input-url+200 u fun)
   #;(printf "\t\tReading ~a\n" (url->string u))
-  (define-values (ip hs) (get-pure-port/headers u #:redirections 25))
+  (define-values (ip hs) (get-pure-port/headers u #:redirections 25 #:status? #t))
   (and (string=? "200" (substring hs 9 12))
        (fun ip)))
 
