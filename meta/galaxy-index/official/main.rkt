@@ -12,6 +12,7 @@
          web-server/formlets
          racket/bool
          racket/list
+         net/sendmail
          meta/galaxy-index/basic/main
          "gravatar.rkt"
          "id-cookie.rkt")
@@ -165,11 +166,24 @@
 
   (cond
     [(not (file-exists? password-path))
-     ....
-     
-     ....
-     
-
+     (send/suspend
+      (λ (k-url)
+        (send-mail-message 
+         "galaxy@racket-lang.org"
+         "Account confirmation for Racket Galaxy"
+         (list email)
+         empty empty
+         (list "Someone tried to register your email address for an account on Racket Galaxy. If you want to authorize this registration and log in, please click the following link:"
+               ""
+               k-url
+               ""
+               "This link will expire, so if it is not available, you'll have to try to register again."))
+        (template
+         (list "Account Registration")
+         `(p "An email has been sent to "
+             (tt ,email) 
+             ", please click the link it contains to register and log in."))))
+     (display-to-file password-path passwd)
      (authenticated!)]
     [(not (bytes=? passwd (file->bytes password-path)))
      (login req (format "The given password is incorrect for email address ~e"
