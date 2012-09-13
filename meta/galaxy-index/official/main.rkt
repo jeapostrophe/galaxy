@@ -14,7 +14,6 @@
          racket/list
          net/sendmail
          meta/galaxy-index/basic/main
-         "gravatar.rkt"
          ;; XXX move this into a library
          "id-cookie.rkt")
 
@@ -44,17 +43,21 @@
 (define (package-list)
   (sort (map path->string (directory-list pkgs-path))
         string-ci<=?))
+(define (package-remove! pkg-name)
+  (delete-file (build-path pkgs-path pkg-name)))
 (define (package-info pkg-name)
   (file->value (build-path pkgs-path pkg-name)))
 (define (package-info-set! pkg-name i)
-  (write-to-file (build-path pkgs-path pkg-name) i))
+  (write-to-file i (build-path pkgs-path pkg-name)
+                 #:exists 'replace))
 (define (package-ref pkg-info key)
   (hash-ref pkg-info key
-            (match key
-              [(or 'author 'checksum 'source)
-               (error 'galaxy "Package ~e is missing a required field: ~e"
-                      (hash-ref pkg-info 'name) key)]
-              ['tags empty])))
+            (λ ()
+              (match key
+                [(or 'author 'checksum 'source)
+                 (error 'galaxy "Package ~e is missing a required field: ~e"
+                        (hash-ref pkg-info 'name) key)]
+                ['tags empty]))))
 
 (define .... "....")
 
@@ -67,6 +70,7 @@
    [("login") page/login]
    [("manage") page/manage]
    [("manage" "update") page/manage/update]
+   [("manage" "edit" (string-arg)) page/manage/edit]
    [("manage" "upload") page/manage/upload]
    [else basic-start]))
 
@@ -105,7 +109,6 @@
        ;; XXX breadcrumb
        (h1 ,@title)
        ,@xexpr-forest
-       ;; XXX footer
        (div ([id "footer"])
             "Powered by "
             (a ([href "http://racket-lang.org/"]) "Racket") ". "
@@ -184,7 +187,7 @@
     [(not (file-exists? password-path))
      (send/suspend
       (λ (k-url)
-        (send-mail-message 
+        (send-mail-message
          "galaxy@racket-lang.org"
          "Account confirmation for Racket Galaxy"
          (list email)
@@ -197,7 +200,7 @@
         (template
          (list "Account Registration")
          `(p "An email has been sent to "
-             (tt ,email) 
+             (tt ,email)
              ", please click the link it contains to register and log in."))))
      (display-to-file passwd password-path)
      (authenticated!)]
@@ -250,18 +253,76 @@
    (package-table page/manage/edit pkgs)))
 
 (define (page/manage/upload req)
-  (template
-   (list "Manage" "Upload")
-   ....
-   ;; XXX
-   ....))
+  (page/manage/edit req #f))
 
-(define (page/manage/edit req)
-  (template
-   (list "Manage" "Edit")
-   ....
-   ;; XXX
-   ....))
+(define (page/manage/edit req pkg)
+  (define-values
+    (pkg-name-bs pkg-source-bs pkg-desc-bs)
+    (match pkg
+      [#f
+       (values #"" #"" #"")]
+      [_
+       (define i (package-info pkg))
+       (apply values
+              (map string->bytes/utf-8
+                   (list pkg
+                         (package-ref i 'source)
+                         (package-ref i 'description))))]))
+
+  ;; XXX look nice
+  (define pkg-formlet
+    (formlet
+     (table
+      (tr (td "Package:")
+          (td  ,{(to-string (required (text-input #:value pkg-name-bs))) . => . package}))
+      (tr (td "Source:")
+          (td ,{(to-string (required (text-input #:value pkg-source-bs))) . => . source}))
+      (tr (td "Description:")
+          (td ,{(to-string (required (textarea-input #:value pkg-desc-bs))) . => . desc})))
+     (values package source desc)))
+  (define pkg-req
+    (send/suspend
+     (λ (k-url)
+       (template
+        (list "Manage" (if pkg "Edit" "Upload"))
+        `(div ([class "pkg_edit"])
+              (form ([action ,k-url] [method "post"])
+                    ,@(formlet-display pkg-formlet)
+                    (input ([type "submit"] [value "Submit"]))))))))
+  (define-values
+    (new-pkg new-source new-desc)
+    (formlet-process pkg-formlet pkg-req))
+
+  (package-begin
+   (define* i
+     (if pkg
+       (package-info pkg)
+       (hasheq)))
+
+   (define* i
+     (hash-set i 'name new-pkg))
+   (define* i
+     (hash-set i 'source new-source))
+   (define* i
+     (hash-set i 'author (current-user req #t)))
+   (define* i
+     (hash-set i 'description new-desc))
+   (define* i
+     (hash-set i 'last-edit (current-seconds)))
+   (define* i
+     (if pkg
+       i
+       (hash-set i 'checksum "")))
+
+   (package-info-set! new-pkg i))
+
+  (unless (or (not pkg) (equal? new-pkg pkg))
+    (package-remove! pkg))
+
+  (update-checksum new-pkg)
+
+  (redirect-to
+   (main-url page/manage/edit new-pkg)))
 
 (define (page/manage/update req)
   (update-checksums
