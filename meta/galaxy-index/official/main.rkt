@@ -87,7 +87,7 @@
 
 (define (search-term-eval pkg-name info term)
   (match term
-    [(regexp #rx"^author:(.*?)" (list _ author))
+    [(regexp #rx"^author:(.*?)$" (list _ author))
      (equal? author (package-ref info 'author))]
     [_
      (define term-rx (regexp-quote term))
