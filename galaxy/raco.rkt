@@ -27,15 +27,6 @@
   (with-handlers ([exn:fail? (λ (x) def)])
     (file->value pth)))
 
-(define (url-path/no-slash url)
-  (define p (url-path url))
-  (define rp (reverse p))
-  (reverse
-   (match rp
-     [(list* (path/param "" _) rest)
-      rest]
-     [_ rp])))
-
 (define (path->bytes* pkg)
   (cond
     [(path? pkg)
@@ -139,26 +130,7 @@
     [`(pns ,pkg-name)
      (hash-ref (package-index-lookup pkg-name) 'checksum)]
     [`(url ,pkg-url-str)
-     (define pkg-url
-       (string->url pkg-url-str))
-     (match (url-scheme pkg-url)
-       ["github"
-        (match-define (list* user repo branch path)
-                      (map path/param-path (url-path/no-slash pkg-url)))
-        (define branches
-          (call/input-url+200
-           (url "https" #f "api.github.com" #f #t
-                (map (λ (x) (path/param x empty))
-                     (list "repos" user repo "branches"))
-                empty
-                #f)
-           get-pure-port
-           read-json))
-        (for/or ([b (in-list branches)])
-          (and (equal? (hash-ref b 'name) (string->symbol branch))
-               (hash-ref (hash-ref b 'commit) 'sha)))]
-       [_
-        (package-url->checksum pkg-url-str)])]))
+     (package-url->checksum pkg-url-str)]))
 
 (define (read-file-hash file)
   (define the-db

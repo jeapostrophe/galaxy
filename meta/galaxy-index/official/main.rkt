@@ -293,6 +293,8 @@
     (new-pkg new-source new-desc)
     (formlet-process pkg-formlet pkg-req))
 
+  ;; XXX make sure we are not deleting a package current-user didn't make
+
   (package-begin
    (define* i
      (if pkg

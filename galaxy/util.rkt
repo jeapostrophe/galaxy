@@ -4,7 +4,9 @@
          racket/function
          racket/file
          racket/port
-         net/url)
+         racket/match
+         net/url
+         json)
 
 (define (make-parent-directory* p)
   (define parent (path-only p))
@@ -32,8 +34,35 @@
   (and (string=? "200" (substring hs 9 12))
        (fun ip)))
 
+(define (url-path/no-slash url)
+  (define p (url-path url))
+  (define rp (reverse p))
+  (reverse
+   (match rp
+     [(list* (path/param "" _) rest)
+      rest]
+     [_ rp])))
+
 (define (package-url->checksum pkg-url-str)
-  (call/input-url+200 (string->url (string-append pkg-url-str ".CHECKSUM"))
-                      port->string))
+  (define pkg-url
+    (string->url pkg-url-str))
+  (match (url-scheme pkg-url)
+    ["github"
+     (match-define (list* user repo branch path)
+                   (map path/param-path (url-path/no-slash pkg-url)))
+     (define branches
+       (call/input-url+200
+        (url "https" #f "api.github.com" #f #t
+             (map (λ (x) (path/param x empty))
+                  (list "repos" user repo "branches"))
+             empty
+             #f)
+        read-json))
+     (for/or ([b (in-list branches)])
+       (and (equal? (hash-ref b 'name) branch)
+            (hash-ref (hash-ref b 'commit) 'sha)))]
+    [_
+     (call/input-url+200 (string->url (string-append pkg-url-str ".CHECKSUM"))
+                         port->string)]))
 
 (provide (all-defined-out))
