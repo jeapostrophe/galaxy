@@ -135,6 +135,9 @@
      '("planet-mcdonald-farm1")))
 
 ;; Initialize the root on boot
+(define mins
+  (build-path root "mins"))
+(make-directory* mins)
 (define orig-pkg
   (build-path root "orig-pkg"))
 (make-directory* orig-pkg)
@@ -206,114 +209,143 @@
 (define all-pkg-list
   (for/list ([p (in-list pkgs)])
     (match-define (list user pkg (list max-maj min)) p)
-    (for/list ([maj (in-range 1 (add1 max-maj))])
-      (let/ec esc
-        (define dl-url
-          (struct-copy url planet-download-url
-                       [query
-                        (let ([get (lambda (access) (format "~s" access))])
-                          `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
-                            (name   . ,(get pkg))
-                            (maj    . ,(get maj))
-                            (min-lo . "0" #;,(get min))
-                            (min-hi . "#f" #;,(get min))
-                            (path   . ,(get (list user)))))]))
-        (define pkg-short
-          (format "~a:~a:~a" user maj pkg))
 
-        (define dest
-          (build-path orig-pkg pkg-short))
-        (unless (file-exists? dest)
-          (printf "Downloading ~a\n" pkg-short)
-          (define pkg-bs
-            (call/input-url dl-url get-impure-port
-                            (λ (in)
-                              (define hs (purify-port in))
-                              (when (string=? "404" (substring hs 9 12))
-                                (esc #f))
-                              (port->bytes in))))
-          (call-with-output-file dest
-            (λ (out) (write-bytes pkg-bs out))))
+    (define last-min-p (build-path mins (format "~a:~a" user pkg)))
+    (define last-min
+      (if (file-exists? last-min-p)
+        (file->value last-min-p)
+        -inf.0))
+    (define delete?
+      (not (= last-min min)))
 
-        (define dest-dir
-          (build-path orig pkg-short))
-        (unless (directory-exists? dest-dir)
-          (printf "Unpacking ~a\n" pkg-short)
-          (make-directory dest-dir)
-          (local-require galaxy/util-plt)
-          (unplt dest dest-dir))
+    (begin0
+      (for/list ([maj (in-range 1 (add1 max-maj))])
+        (let/ec esc
+          (define dl-url
+            (struct-copy url planet-download-url
+                         [query
+                          (let ([get (lambda (access) (format "~s" access))])
+                            `((lang   . ,(get (DEFAULT-PACKAGE-LANGUAGE)))
+                              (name   . ,(get pkg))
+                              (maj    . ,(get maj))
+                              (min-lo . "0" #;,(get min))
+                              (min-hi . "#f" #;,(get min))
+                              (path   . ,(get (list user)))))]))
+          (define pkg-short
+            (format "~a:~a:~a" user maj pkg))
 
-        (define pkg/no-plt
-          (format "~a~a"
-                  (regexp-replace* #rx"\\.plt$" pkg "")
-                  maj))
-        (define pkg-name
-          (format "planet-~a-~a" user pkg/no-plt))
-        (define pkg-name.plt
-          (format "~a.plt" pkg-name))
-        (define pkg-dir
-          (build-path work pkg-name))
-        (with-handlers
-            ([exn? (λ (x)
-                     (delete-directory/files pkg-dir)
-                     (raise x))])
-          (unless (directory-exists? pkg-dir)
-            (printf "Translating ~a\n" pkg-short)
-            (make-directory* pkg-dir)
-            (define files-dir
-              (build-path pkg-dir user pkg/no-plt))
-            (make-directory* files-dir)
+          (define-syntax-rule (when-delete? e ...)
+            (with-handlers ([exn:fail? void])
+              (when delete?
+                e ...)))
 
-            (define all-deps
-              (fold-files
-               (λ (p ty deps)
-                 (define rp
-                   (find-relative-path dest-dir p))
-                 (define fp
-                   (if (equal? p rp)
-                     files-dir
-                     (build-path files-dir rp)))
-                 (match ty
-                   ['dir
-                    (make-directory* fp)
-                    deps]
-                   ['file
-                    (match (filename-extension rp)
-                      [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
-                       (define orig (file->bytes p))
-                       (define-values (changed new-deps)
-                         (update-planet-reqs pkgs orig))
-                       (display-to-file changed fp)
-                       (append new-deps deps)]
-                      [_
-                       (copy-file p fp)
-                       deps])]))
-               empty
-               dest-dir
-               #f))
-            (define deps
-              (remove pkg-name
-                      (remove-duplicates
-                       all-deps)))
+          (define dest
+            (build-path orig-pkg pkg-short))
+          (when-delete?
+           (delete-file dest))
+          (unless (file-exists? dest)
+            (printf "Downloading ~a\n" pkg-short)
+            (define pkg-bs
+              (call/input-url dl-url get-impure-port
+                              (λ (in)
+                                (define hs (purify-port in))
+                                (when (string=? "404" (substring hs 9 12))
+                                  (esc #f))
+                                (port->bytes in))))
+            (call-with-output-file dest
+              (λ (out) (write-bytes pkg-bs out))))
 
-            (printf "\tdeps ~a\n" deps)
-            (write-to-file
-             `((dependency ,@deps))
-             (build-path pkg-dir "METADATA.rktd"))))
+          (define dest-dir
+            (build-path orig pkg-short))
+          (when-delete?
+           (delete-directory/files dest-dir))
+          (unless (directory-exists? dest-dir)
+            (printf "Unpacking ~a\n" pkg-short)
+            (make-directory dest-dir)
+            (local-require galaxy/util-plt)
+            (unplt dest dest-dir))
 
-        (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
-        (unless (file-exists? pkg-pth)
-          (printf "Packaging ~a\n" pkg-short)
-          (parameterize ([current-directory work])
-            (system (format "raco pkg create ~a" pkg-name))
-            (rename-file-or-directory
-             (build-path work pkg-name.plt)
-             pkg-pth)
-            (rename-file-or-directory
-             (string-append (path->string (build-path work pkg-name.plt)) ".CHECKSUM")
-             (string-append (path->string pkg-pth) ".CHECKSUM"))))
+          (define pkg/no-plt
+            (format "~a~a"
+                    (regexp-replace* #rx"\\.plt$" pkg "")
+                    maj))
+          (define pkg-name
+            (format "planet-~a-~a" user pkg/no-plt))
+          (define pkg-name.plt
+            (format "~a.plt" pkg-name))
+          (define pkg-dir
+            (build-path work pkg-name))
 
-        pkg-name))))
+          (when-delete?
+           (delete-directory/files pkg-dir))
+
+          (with-handlers
+              ([exn? (λ (x)
+                       (delete-directory/files pkg-dir)
+                       (raise x))])
+            (unless (directory-exists? pkg-dir)
+              (printf "Translating ~a\n" pkg-short)
+              (make-directory* pkg-dir)
+              (define files-dir
+                (build-path pkg-dir user pkg/no-plt))
+              (make-directory* files-dir)
+
+              (define all-deps
+                (fold-files
+                 (λ (p ty deps)
+                   (define rp
+                     (find-relative-path dest-dir p))
+                   (define fp
+                     (if (equal? p rp)
+                       files-dir
+                       (build-path files-dir rp)))
+                   (match ty
+                     ['dir
+                      (make-directory* fp)
+                      deps]
+                     ['file
+                      (match (filename-extension rp)
+                        [(or #"ss" #"scrbl" #"rkt" #"scs" #"scm" #"scribl")
+                         (define orig (file->bytes p))
+                         (define-values (changed new-deps)
+                           (update-planet-reqs pkgs orig))
+                         (display-to-file changed fp)
+                         (append new-deps deps)]
+                        [_
+                         (copy-file p fp)
+                         deps])]))
+                 empty
+                 dest-dir
+                 #f))
+              (define deps
+                (remove pkg-name
+                        (remove-duplicates
+                         all-deps)))
+
+              (printf "\tdeps ~a\n" deps)
+              (write-to-file
+               `((dependency ,@deps))
+               (build-path pkg-dir "METADATA.rktd"))))
+
+          (define pkg-pth (build-path pkg-depo pkg-depo-dir pkg-name.plt))
+          (when-delete?
+           (delete-file pkg-pth)
+           (delete-file (string-append (path->string pkg-pth) ".CHECKSUM")))
+          (unless (file-exists? pkg-pth)
+            (printf "Packaging ~a\n" pkg-short)
+            (parameterize ([current-directory work])
+              (system (format "raco pkg create ~a" pkg-name))
+              (rename-file-or-directory
+               (build-path work pkg-name.plt)
+               pkg-pth)
+              (rename-file-or-directory
+               (string-append (path->string (build-path work pkg-name.plt)) ".CHECKSUM")
+               (string-append (path->string pkg-pth) ".CHECKSUM"))))
+
+          pkg-name))
+
+      (write-to-file min last-min-p
+                     #:exists 'replace))))
 
 (define pkg-list
   ;; No idea why there are duplicates
@@ -345,9 +377,10 @@
    #:extra-files-paths
    (list pkg-depo)
    #:servlet-regexp #rx""
+   #:listen-ip #f
    #:port port))
 
 (provide go)
 
 (module+ main
-  (go 6319))
+  (go 9003))
