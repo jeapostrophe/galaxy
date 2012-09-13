@@ -40,8 +40,6 @@
 
 ;; XXX make main social server
 
-;; XXX setup deployed servers (main index + planet compat)
-
 ;; XXX test real main index
 
 ;; XXX Remove discussion of single collect packages, instead just fork for existing githubs

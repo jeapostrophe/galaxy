@@ -175,7 +175,7 @@
          empty empty
          (list "Someone tried to register your email address for an account on Racket Galaxy. If you want to authorize this registration and log in, please click the following link:"
                ""
-               k-url
+               (format "https://plt-etc.byu.edu:9004~a" k-url)
                ""
                "This link will expire, so if it is not available, you'll have to try to register again."))
         (template
@@ -183,9 +183,10 @@
          `(p "An email has been sent to "
              (tt ,email) 
              ", please click the link it contains to register and log in."))))
-     (display-to-file password-path passwd)
+     (display-to-file passwd password-path)
      (authenticated!)]
-    [(not (bytes=? passwd (file->bytes password-path)))
+    [(not (bytes=? (string->bytes/utf-8 passwd)
+                   (file->bytes password-path)))
      (login req (format "The given password is incorrect for email address ~e"
                         email))]
     [else
