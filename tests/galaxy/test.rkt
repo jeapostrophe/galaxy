@@ -42,10 +42,13 @@
 
 ;; XXX setup deployed servers (main index + planet compat)
 
-;; XXX update planet test for real compat server address
-
 ;; XXX test real main index
+
+;; XXX Remove discussion of single collect packages, instead just fork for existing githubs
+
+;; XXX write docs
 
 ;; XXX email adm a basic thing
 
 ;; XXX email dev about deployment
+

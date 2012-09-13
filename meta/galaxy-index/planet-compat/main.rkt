@@ -364,7 +364,7 @@
                (file->string
                 (build-path pkg-depo pkg-depo-dir (format "~a.plt.CHECKSUM" pkg-name)))
                'source
-               (format "http://localhost:~a/~a/~a.plt"
+               (format "https://plt-etc.byu.edu:~a/~a/~a.plt"
                        port pkg-depo-dir pkg-name)
                'url
                (let ()
@@ -373,6 +373,9 @@
                                pkg-name)
                  (format "http://planet.racket-lang.org/display.ss?package=~a.plt&owner=~a"
                          pkg user))))))
+   #:ssl? #t
+   #:ssl-cert (build-path root "server-cert.pem")
+   #:ssl-key (build-path root "private-key.pem")
    #:command-line? #t
    #:extra-files-paths
    (list pkg-depo)

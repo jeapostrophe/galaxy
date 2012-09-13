@@ -286,6 +286,9 @@
   (serve/servlet
    main-dispatch
    #:command-line? #t
+   #:ssl? #t
+   #:ssl-cert (build-path root "server-cert.pem")
+   #:ssl-key (build-path root "private-key.pem")
    #:extra-files-paths
    (list (build-path root "static"))
    #:servlet-regexp #rx""

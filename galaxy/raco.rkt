@@ -115,9 +115,18 @@
 (define-syntax-rule (with-package-lock e ...)
   (with-package-lock* (λ () e ...)))
 
+(define (read-pkg-cfg/def k)
+  (define c (read-pkg-cfg))
+  (hash-ref c k
+            (λ ()
+              (match k
+                ["indexes"
+                 (list "https://plt-etc.byu.edu:9004"
+                       "https://plt-etc.byu.edu:9003")]))))
+
 (define (package-index-lookup pkg)
   (or
-   (for/or ([i (in-list (hash-ref (read-pkg-cfg) "indexes" empty))])
+   (for/or ([i (in-list (read-pkg-cfg/def "indexes"))])
      (call/input-url+200
       (combine-url/relative
        (string->url i)
@@ -732,7 +741,7 @@
      [config:set
       (match key+vals
         [(list* (and key "indexes") val)
-         (update-pkg-cfg! key val)]
+         (update-pkg-cfg! "indexes" val)]
         [(list key)
          (error 'galaxy "unsupported config key: ~e" key)]
         [(list)
@@ -742,7 +751,7 @@
         [(list key)
          (match key
            ["indexes"
-            (for ([s (in-list (hash-ref (read-pkg-cfg) key empty))])
+            (for ([s (in-list (read-pkg-cfg/def "indexes"))])
               (printf "~a\n" s))]
            [_
             (error 'galaxy "unsupported config key: ~e" key)])]
