@@ -269,7 +269,7 @@
                          (package-ref i 'source)
                          (package-ref i 'description))))]))
 
-  ;; XXX look nice
+  ;; XXX look nice, make wider, mention valid source format
   (define pkg-formlet
     (formlet
      (table
