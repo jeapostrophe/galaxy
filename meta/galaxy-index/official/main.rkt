@@ -15,6 +15,7 @@
          net/sendmail
          meta/galaxy-index/basic/main
          "gravatar.rkt"
+         ;; XXX move this into a library
          "id-cookie.rkt")
 
 (define-syntax-rule (while cond e ...)
@@ -22,6 +23,8 @@
     (when cond
       e ...
       (loop))))
+
+(define-runtime-path src ".")
 
 (define-runtime-path root "root")
 (make-directory* root)
@@ -92,7 +95,10 @@
    (response/xexpr
     `(html
       (head
-       ;; XXX style
+       (script ([src "/sorttable.js"]) " ")
+       (link ([rel "stylesheet"]
+              [type "text/css"]
+              [href "/style.css"]))
        (title ,@title))
       (body
        ;; XXX racket header
@@ -100,7 +106,12 @@
        (h1 ,@title)
        ,@xexpr-forest
        ;; XXX footer
-       )))))
+       (div ([id "footer"])
+            "Powered by "
+            (a ([href "http://racket-lang.org/"]) "Racket") ". "
+            "Written by "
+            (a ([href "http://faculty.cs.byu.edu/~jay"]) "Jay McCarthy")
+            "."))))))
 
 (define (package-list/search ts)
   (filter
@@ -127,7 +138,6 @@
   (redirect-to (main-url page/main)))
 
 (define (login req [last-error #f])
-  ;; XXX give ability to create an account
   ;; XXX look nice
   (define login-formlet
     (formlet
@@ -161,7 +171,13 @@
       (cookie->header
        (make-id-cookie secret-key email)))))
 
-  ;; XXX worry about email containing /s
+  (when (regexp-match (regexp-quote "/") email)
+    (send/back
+     (template
+      (list "Account Registration Error")
+      `(p "Email addresses may not contain / on Galaxy:"
+          (tt ,email)))))
+
   (define password-path (build-path users-path email))
 
   (cond
@@ -209,7 +225,7 @@
 
 (define (package-table page/package pkgs)
   `(table
-    ;; XXX re-style
+    ([class "packages sortable"])
     (tr (th "Package") (th "Author") (th "Description") (th "Tags"))
     ,@(for/list ([p (in-list pkgs)])
         (define i (package-info p))
@@ -237,12 +253,14 @@
   (template
    (list "Manage" "Upload")
    ....
+   ;; XXX
    ....))
 
 (define (page/manage/edit req)
   (template
    (list "Manage" "Edit")
    ....
+   ;; XXX
    ....))
 
 (define (page/manage/update req)
@@ -276,7 +294,6 @@
 (define basic-start
   (galaxy-index/basic package-list package-info))
 
-;; XXX only run with ssl
 (define (go port)
   (thread
    (λ ()
@@ -292,7 +309,8 @@
    #:ssl-cert (build-path root "server-cert.pem")
    #:ssl-key (build-path root "private-key.pem")
    #:extra-files-paths
-   (list (build-path root "static"))
+   (list (build-path src "static")
+         (build-path root "static"))
    #:servlet-regexp #rx""
    #:port port))
 
