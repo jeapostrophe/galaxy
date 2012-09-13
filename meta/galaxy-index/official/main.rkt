@@ -286,6 +286,7 @@
   (serve/servlet
    main-dispatch
    #:command-line? #t
+   #:listen-ip #f
    #:ssl? #t
    #:ssl-cert (build-path root "server-cert.pem")
    #:ssl-key (build-path root "private-key.pem")
