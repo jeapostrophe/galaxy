@@ -243,7 +243,13 @@ implementation and its use simple.
    packages on install. I think the solution is to ship with the .plt
    files and have the install run, so they get put in the right
    places, rather than having them "pre installed"
+** TODO Trusted packages & DrDr
+   Including zo hosting
+** TODO Have an install package macro for internal linking
+** TODO Track package query statistics
 ** TODO Better "social" features on site
+   - Link disqus per package
+   - Link github bug db (or other bug db by URL) per package
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
 ** TODO Make a GUI

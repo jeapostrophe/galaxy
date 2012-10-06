@@ -247,9 +247,8 @@
           (when-delete?
            (delete-file dest))
           (unless (file-exists? dest)
-            (printf "Downloading ~a from ~a\n"
-                    pkg-short 
-                    (url->string dl-url))
+            (printf "Downloading ~a\n"
+                    pkg-short)
             (define pkg-bs
               (call/input-url dl-url get-impure-port
                               (λ (in)
@@ -359,6 +358,7 @@
                (append* all-pkg-list))))
 
 (define (go port)
+  (printf "Launching server on port ~a\n" port)
   (serve/servlet
    (galaxy-index/basic
     (λ () pkg-list)
