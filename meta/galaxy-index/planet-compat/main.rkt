@@ -153,8 +153,10 @@
 (define pkg-depo-dir "static")
 (make-directory* (build-path pkg-depo pkg-depo-dir))
 
-(define pkg-info-url (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
-(define pkgs (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
+(define pkg-info-url
+  (string->url "http://planet.racket-lang.org/servlets/pkg-info.ss"))
+(define pkgs
+  (call/input-url pkg-info-url get-pure-port (λ (p) (read p) (read p))))
 (define planet-download-url
   (string->url (HTTP-DOWNLOAD-SERVLET-URL)))
 
@@ -188,6 +190,7 @@
                  '("divascheme.plt" ("dyoo") 1) ;; user should be divascheme
                  '("diff.plt" ("wmfarr") 1) ;; pkg should be deriv
                  '("tetris.plt" ("dvanhorn") 5) ;; maj should be 3
+                 '("file-utils.plt" ("erast") #f) ;; pkg should be fileutils
                  ;; These are from packages about planet features
                  '("sqld-psql-ffi.plt" ("planet") 1)
                  '("sqlid.plt" ("planet") 1)
@@ -244,7 +247,9 @@
           (when-delete?
            (delete-file dest))
           (unless (file-exists? dest)
-            (printf "Downloading ~a\n" pkg-short)
+            (printf "Downloading ~a from ~a\n"
+                    pkg-short 
+                    (url->string dl-url))
             (define pkg-bs
               (call/input-url dl-url get-impure-port
                               (λ (in)
