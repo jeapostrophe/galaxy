@@ -14,8 +14,7 @@
          racket/list
          net/sendmail
          meta/galaxy-index/basic/main
-         ;; XXX move this into a library
-         "id-cookie.rkt")
+         web-server/http/id-cookie)
 
 (define-syntax-rule (while cond e ...)
   (let loop ()
@@ -28,12 +27,8 @@
 (define-runtime-path root "root")
 (make-directory* root)
 (define secret-key
-  (let ()
-    (define secret-key-path
-      (build-path root "secret.key"))
-    (unless (file-exists? secret-key-path)
-      (system (format "openssl rand -out ~a -hex 64" secret-key-path)))
-    (file->bytes secret-key-path)))
+  (make-secret-salt/file
+   (build-path root "secret.key")))
 (define users-path (build-path root "users"))
 (make-directory* users-path)
 (define pkgs-path (build-path root "pkgs"))
@@ -172,7 +167,7 @@
      #:headers
      (list
       (cookie->header
-       (make-id-cookie secret-key email)))))
+       (make-id-cookie "id" secret-key email)))))
 
   (when (regexp-match (regexp-quote "/") email)
     (send/back
@@ -213,7 +208,7 @@
 
 (define (current-user req required?)
   (define id
-    (request-valid-id-cookie secret-key req))
+    (request-id-cookie "id" secret-key req))
   (cond
     [id
      id]
