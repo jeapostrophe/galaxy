@@ -4,4 +4,4 @@
 (define scribblings 
   '(("scribblings/galaxy.scrbl" (multi-page) (tool))))
 (define raco-commands
-  '(("pkg" galaxy/raco "manage packages" 81)))
+  '(("pkg" galaxy/main "manage packages" 81)))
