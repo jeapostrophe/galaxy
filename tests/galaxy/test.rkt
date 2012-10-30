@@ -35,18 +35,3 @@
  "update-deps"
  "update-auto"
  "raco")
-
-;; XXX scour github for initial packages
-
-;; XXX make main social server
-
-;; XXX test real main index
-
-;; XXX Remove discussion of single collect packages, instead just fork for existing githubs
-
-;; XXX write docs
-
-;; XXX email adm a basic thing
-
-;; XXX email dev about deployment
-

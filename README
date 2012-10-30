@@ -226,7 +226,23 @@ implementation and its use simple.
 ** Other things
    I'd like to extend the props so there is meta/props.d where
    packages can install custom props for DrDr
+* Things to do before release
+** TODO Create initial packages (my own)
+** TODO Email current popular package owners to help them convert
+** TODO Finish the main server (style)
+** TODO Finish the main server (functionality)
+** TODO Change name from galaxy to p2
+** TODO Write the library interface (for DrR usage)
+** TODO Test against the main server
+** TODO Write documentation (convert this document but remove single collect packages)
+** TODO Email adm about the project
+** TODO Email dev about the deployment
 * More things to do in the future
+** TODO Implement the trusted idea on the server and have a package search option
+   Have this be versioned (so you can see older fringes) and have
+   them it named by a URL in the code, so you can make your own and
+   use more
+** TODO Create a resolver that searches on server to install a trusted package that provides it
 ** TODO system and user package databases are totally separate
    system -> user conflicts: how to find other users than the
    installing user?
@@ -250,6 +266,7 @@ implementation and its use simple.
 ** TODO Better "social" features on site
    - Link disqus per package
    - Link github bug db (or other bug db by URL) per package
+   - Link docs in some way
 ** TODO Support straight git, not just github
 ** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
 ** TODO Make a GUI
