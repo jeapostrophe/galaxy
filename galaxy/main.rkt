@@ -540,19 +540,30 @@
   (for-each (λ (t) (t)) do-its))
 
 (define (install-cmd pkgs
+                     #:force? [force #f]
+                     #:link? [link #f]
+                     #:ignore-checksums? [ignore-checksums #f]
                      #:pre-succeed [pre-succeed void]
                      #:dep-behavior [dep-behavior #f]
                      #:updating? [updating? #f])
   (with-handlers ([list?
                    (λ (deps)
-                     (install-cmd #:dep-behavior dep-behavior
-                                  #:pre-succeed pre-succeed
-                                  #:updating? updating?
-                                  (append (map (curry cons #t) deps) pkgs)))])
-    (install-packages #:dep-behavior dep-behavior
+                     (install-cmd
+                      #:force? force
+                      #:link? link
+                      #:ignore-checksums? ignore-checksums
+                      #:dep-behavior dep-behavior
                       #:pre-succeed pre-succeed
                       #:updating? updating?
-                      pkgs)
+                      (append (map (curry cons #t) deps) pkgs)))])
+    (install-packages
+     #:force? force
+     #:link? link
+     #:ignore-checksums? ignore-checksums
+     #:dep-behavior dep-behavior
+     #:pre-succeed pre-succeed
+     #:updating? updating?
+     pkgs)
     (system "raco setup")))
 
 (define (update-is-possible? pkg-name)
@@ -611,12 +622,120 @@
       #:dep-behavior dep-behavior
       (map cdr to-update))]))
 
+(define (show-cmd)
+  (let ()
+    (define db (read-pkg-db))
+    (define pkgs (sort (hash-keys db) string-ci<=?))
+    (table-display
+     (list*
+      (list "Package(auto?)" "Checksum" "Source")
+      (for/list ([pkg (in-list pkgs)])
+        (match-define (pkg-info orig-pkg checksum auto?) (hash-ref db pkg))
+        (list (format "~a~a"
+                      pkg
+                      (if auto?
+                        "*"
+                        ""))
+              (format "~a" checksum)
+              (format "~a" orig-pkg)))))))
+
+(define (config-cmd config:set key+vals)
+  (cond
+    [config:set
+     (match key+vals
+       [(list* (and key "indexes") val)
+        (update-pkg-cfg! "indexes" val)]
+       [(list key)
+        (error 'galaxy "unsupported config key: ~e" key)]
+       [(list)
+        (error 'galaxy "must provide config key")])]
+    [else
+     (match key+vals
+       [(list key)
+        (match key
+          ["indexes"
+           (for ([s (in-list (read-pkg-cfg/def "indexes"))])
+             (printf "~a\n" s))]
+          [_
+           (error 'galaxy "unsupported config key: ~e" key)])]
+       [(list)
+        (error 'galaxy "must provide config key")]
+       [_
+        (error 'galaxy "must provide only config key")])]))
+
+(define (create-cmd create:format manifest maybe-dir)
+  (begin
+    (define dir (regexp-replace* #rx"/$" maybe-dir ""))
+    (unless (directory-exists? dir)
+      (error 'galaxy "directory does not exist: ~e" dir))
+    (match create:format
+      ["MANIFEST"
+       (with-output-to-file
+           (build-path dir "MANIFEST")
+         #:exists 'replace
+         (λ ()
+           (for ([f (in-list (parameterize ([current-directory dir])
+                               (find-files file-exists?)))])
+             (display f)
+             (newline))))]
+      [else
+       (define pkg (format "~a.~a" dir create:format))
+       (define pkg-name
+         (regexp-replace
+          (regexp (format "~a$" (regexp-quote (format ".~a" create:format))))
+          (path->string (file-name-from-path pkg))
+          ""))
+       (match create:format
+         ["tgz"
+          (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
+            (delete-file pkg)
+            (error 'galaxy "Package creation failed"))]
+         ["zip"
+          (define orig-pkg (normalize-path pkg))
+          (parameterize ([current-directory dir])
+            (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
+              (delete-file pkg)
+              (error 'galaxy "Package creation failed")))]
+         ["plt"
+          (pack-plt pkg pkg-name (list dir)
+                    #:as-paths (list "."))]
+         [x
+          (error 'pkg "Invalid package format: ~e" x)])
+       (define chk (format "~a.CHECKSUM" pkg))
+       (with-output-to-file chk #:exists 'replace
+                            (λ () (display (call-with-input-file pkg sha1))))])))
+
+(define dep-behavior/c
+  (or/c false/c
+        (symbols 'fail 'force 'search-ask 'search-auto)))
+
 (provide
  with-package-lock
  (contract-out
   [current-install-system-wide?
    (parameter/c boolean?)]
+  [config-cmd
+   (-> boolean? list?
+       void)]
+  [create-cmd
+   (-> string? (or/c false/c string?) path-string?
+       void)]
+  [update-packages
+   (->* ((listof string?))
+        (#:dep-behavior dep-behavior/c
+                        #:deps? boolean?)
+        void)]
+  [remove-packages
+   (->* ((listof string?))
+        (#:auto? boolean?
+                 #:force? boolean?)
+        void)]
+  [show-cmd
+   (-> void)]
   [install-cmd
-   (->* ()
-        ()
+   (->* ((listof (cons/c boolean? string?)))
+        (#:dep-behavior dep-behavior/c
+                        #:force? boolean?
+                        #:link? boolean?
+                        #:ignore-checksums? boolean?)
         void)]))
