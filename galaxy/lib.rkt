@@ -633,9 +633,7 @@
      #:dep-behavior dep-behavior
      #:pre-succeed pre-succeed
      #:updating? updating?
-     pkgs)
-    #;
-    (system "raco setup")))
+     pkgs)))
 
 (define (update-is-possible? pkg-name)
   (match-define (pkg-info orig-pkg checksum _)

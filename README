@@ -233,6 +233,7 @@ implementation and its use simple.
    CLOSED: [2012-10-30 Tue 22:30]
 ** DONE cache downloads during dep search (planet test is unbearable) [or just preserve install-info from one round to the next]
    CLOSED: [2012-10-30 Tue 22:40]
+** TODO add an option for calling 'raco setup' (and unify into one place)
 ** TODO remove tmp dir and just use system's
 ** TODO Test against the main server
 ** TODO Finish the main server (functionality)

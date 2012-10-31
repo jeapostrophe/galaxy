@@ -4,10 +4,16 @@
          "lib.rkt"
          "commands.rkt")
 
+(define (setup dont-setup)
+  (unless (or dont-setup
+              (equal? "1" (getenv "PLT_GALAXY_DONTSETUP")))
+    (system "raco setup")))
+
 (commands
  "This tool is used for managing installed packages."
  [install
   "Install packages"
+  [#:bool dont-setup () "Don't run 'raco setup' after changing packages (generally not a good idea)"]
   [#:bool installation ("-i") "Operate on the installation-wide package database"]
   [(#:sym #f) deps ()
    ("Specify the behavior for dependencies."
@@ -26,9 +32,11 @@
                   #:force? force
                   #:link? link
                   #:ignore-checksums? ignore-checksums
-                  (map (curry cons #f) pkgs))))]
+                  (map (curry cons #f) pkgs))
+     (setup dont-setup)))]
  [update
   "Update packages"
+  [#:bool dont-setup () "Don't run 'raco setup' after changing packages (generally not a good idea)"]
   [#:bool installation ("-i") "Operate on the installation-wide package database"]
   [(#:sym #f) deps ()
    ("Specify the behavior for dependencies."
@@ -43,19 +51,21 @@
     (with-package-lock
      (update-packages pkgs
                       #:dep-behavior deps
-                      #:deps? update-deps)))]
+                      #:deps? update-deps)
+     (setup dont-setup)))]
  [remove
   "Remove packages"
+  [#:bool dont-setup () "Don't run 'raco setup' after changing packages (generally not a good idea)"]
   [#:bool installation ("-i") "Operate on the installation-wide package database"]
   [#:bool force () "Force removal of packages"]
   [#:bool auto () "Remove automatically installed packages with no dependencies"]
   #:args pkgs
   (parameterize ([current-install-system-wide? installation])
     (with-package-lock
-     (begin (remove-packages pkgs
-                             #:auto? auto
-                             #:force? force)
-            (system "raco setup"))))]
+     (remove-packages pkgs
+                      #:auto? auto
+                      #:force? force)
+     (setup dont-setup)))]
  [show
   "Show information about installed packages"
   [#:bool installation ("-i") "Operate on the installation-wide package database"]
