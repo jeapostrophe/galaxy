@@ -86,15 +86,13 @@
   (build-path (pkg-dir) "config.rktd"))
 (define (pkg-db-file)
   (build-path (pkg-dir) "pkgs.rktd"))
-(define (pkg-temporary-dir)
-  (build-path (pkg-dir) "tmp"))
 (define (pkg-installed-dir)
   (build-path (pkg-dir) "installed"))
 (define (pkg-lock-file)
   (make-lock-file-name (pkg-db-file)))
 
 (for-each make-directory*
-          (list (pkg-dir) (pkg-temporary-dir) (pkg-installed-dir)))
+          (list (pkg-dir) (pkg-installed-dir)))
 
 (define (with-package-lock* t)
   (make-directory* (pkg-dir))
@@ -292,7 +290,7 @@
               "")))
        (define pkg-dir
          (make-temporary-file (string-append "~a-" pkg-name)
-                              'directory (pkg-temporary-dir)))
+                              'directory))
        (dynamic-wind
            void
            (λ ()
@@ -329,7 +327,7 @@
                           #f #f)]
            [else
             (define pkg-dir
-              (make-temporary-file "pkg~a" 'directory (pkg-temporary-dir)))
+              (make-temporary-file "pkg~a" 'directory))
             (delete-directory pkg-dir)
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
@@ -359,14 +357,14 @@
                   (string-append
                    "~a-"
                    (format "~a.~a.tgz" repo branch))
-                  #f (pkg-temporary-dir)))
+                  #f))
                (delete-file tmp.tgz)
                (define tmp-dir
                  (make-temporary-file
                   (string-append
                    "~a-"
                    (format "~a.~a" repo branch))
-                  'directory (pkg-temporary-dir)))
+                  'directory))
                (define package-path
                  (apply build-path tmp-dir path))
 
@@ -401,7 +399,7 @@
                        (string-append
                         "~a-"
                         package-name)
-                       'directory (pkg-temporary-dir)))
+                       'directory))
                     (define (path-like f)
                       (build-path package-path f))
                     (define (url-like f)
@@ -424,7 +422,7 @@
                        (string-append
                         "~a-"
                         url-last-component)
-                       #f (pkg-temporary-dir)))
+                       #f))
                     (delete-file package-path)
                     (values package-path
                             (regexp-replace
@@ -501,6 +499,7 @@
       [(and
         (not force?)
         (for/or ([f (in-list (directory-list* pkg-dir))]
+                 #:unless (equal? f (build-path "MANIFEST"))
                  #:unless (equal? f (build-path "METADATA.rktd")))
           (or
            ;; Compare with Racket
