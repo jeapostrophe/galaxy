@@ -38,4 +38,5 @@
  "planet"
  "update-deps"
  "update-auto"
- "raco")
+ "raco"
+ "main-server")

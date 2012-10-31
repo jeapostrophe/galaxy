@@ -235,8 +235,10 @@ implementation and its use simple.
    CLOSED: [2012-10-30 Tue 22:40]
 ** DONE add an option for calling 'raco setup' (and unify into one place)
    CLOSED: [2012-10-31 Wed 15:26]
-** TODO remove tmp dir and just use system's
-** TODO Test against the main server
+** DONE remove tmp dir and just use system's
+   CLOSED: [2012-10-31 Wed 15:29]
+** DONE Test against the main server
+   CLOSED: [2012-10-31 Wed 15:42]
 ** TODO Finish the main server (functionality)
 ** TODO Write documentation (convert this document but remove single collect packages)
 ** TODO Create initial packages (my own)
