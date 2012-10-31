@@ -37,7 +37,9 @@
     $ "raco pkg install http://localhost:9999/galaxy-test1.rar" =exit> 1)
    (shelly-case
     "remote/URL/http directory, no manifest fail"
-    $ "raco pkg install http://localhost:9999/galaxy-test1/galaxy-test1" =exit> 1)
+    $ "raco pkg install http://localhost:9999/galaxy-test1/galaxy-test1"
+    =exit> 1
+    =stderr> #rx"Invalid package format")
    (shelly-case
     "remote/URL/http directory, bad manifest"
     ;; XXX why does this error now?

@@ -35,6 +35,10 @@
       (check-regexp-match exp-v act-v name)
       (check-equal? act-v exp-v name))))
 
+(define (exn:input-port-closed? x)
+  (and (exn:fail? x)
+       (regexp-match #rx"input port is closed" (exn-message x))))
+
 (begin-for-syntax
   (define-splicing-syntax-class shelly-case
     #:attributes (code)
@@ -60,16 +64,29 @@
                   (match-define
                    (list stdout stdin pid stderr to-proc)
                    (process/ports #f
-                                  (and input-str (open-input-string input-str))
+                                  (and input-str 
+                                       (open-input-string input-str))
                                   #f
                                   cmd))
-                  (thread (λ () (copy-port stdout output-port (current-output-port))))
-                  (thread (λ () (copy-port stderr error-port (current-error-port))))
+                  (define stdout-t
+                    (thread 
+                     (λ () 
+                       (with-handlers ([exn:input-port-closed? void])
+                         (copy-port stdout output-port
+                                    (current-output-port))))))
+                  (define stderr-t
+                    (thread
+                     (λ ()
+                       (with-handlers ([exn:input-port-closed? void])
+                         (copy-port stderr error-port
+                                    (current-error-port))))))
                   (to-proc 'wait)
                   (define cmd-status (to-proc 'exit-code))
                   (when stdout (close-input-port stdout))
                   (when stderr (close-input-port stderr))
                   (when stdin (close-output-port stdin))
+                  (thread-wait stdout-t)
+                  (thread-wait stderr-t)
                   (define actual-output
                     (get-output-string output-port))
                   (define actual-error

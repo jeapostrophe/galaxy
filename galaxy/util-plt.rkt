@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/list
          racket/port
+         racket/file
          racket/contract
          setup/unpack)
 
@@ -31,7 +32,7 @@
                       (unless (or (equal? (build-path 'same)
                                           dir)
                                   (directory-exists? new-dir))
-                        (make-directory new-dir)))
+                        (make-directory* new-dir)))
                     (case-lambda
                       [(file content-p _a)
                        (write-file file content-p)]

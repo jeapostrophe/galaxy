@@ -24,26 +24,32 @@
   (define tmp-dir
     (make-temporary-file ".racket.fake-root~a" 'directory
                          (find-system-path 'home-dir)))
+  (make-directory* tmp-dir)
   (define tmp-dir-s
     (path->string tmp-dir))
+  (define before 
+    (or (getenv "PLTADDONDIR")
+        (path->string (find-system-path 'addon-dir))))
   (dynamic-wind
       void
       (λ ()
         ;; {{ This part is because I am developing galaxy in a
         ;; collection root link, but would be unnecessary once galaxy
         ;; is in the core
-        (copy-file (find-system-path 'links-file)
-                   (build-path tmp-dir "links.rktd"))
-        (define info-domain-full-path
-          (get-info-domain-cache-path))
-        (define info-domain-rel-path
-          (find-relative-path (find-system-path 'addon-dir)
-                              info-domain-full-path))
-        (define info-domain-new-path
-          (build-path tmp-dir info-domain-rel-path))
-        (make-parent-directory* info-domain-new-path)
-        (copy-file info-domain-full-path
-                   info-domain-new-path)
+
+        ;; (copy-file (find-system-path 'links-file)
+        ;;            (build-path tmp-dir "links.rktd"))
+        ;; (define info-domain-full-path
+        ;;   (get-info-domain-cache-path))
+        ;; (define info-domain-rel-path
+        ;;   (find-relative-path (find-system-path 'addon-dir)
+        ;;                       info-domain-full-path))
+        ;; (define info-domain-new-path
+        ;;   (build-path tmp-dir info-domain-rel-path))
+        ;; (make-parent-directory* info-domain-new-path)
+        ;; (copy-file info-domain-full-path
+        ;;            info-domain-new-path)
+
         ;; }}
         (putenv "PLTADDONDIR"
                 tmp-dir-s)
@@ -51,7 +57,7 @@
       (λ ()
         (delete-directory/files tmp-dir)
         (putenv "PLTADDONDIR"
-                ""))))
+                before))))
 (define-syntax-rule (with-fake-root e ...)
   (with-fake-root* (λ ()  e ...)))
 

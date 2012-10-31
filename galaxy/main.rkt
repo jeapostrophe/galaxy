@@ -78,4 +78,4 @@
     "Options are: tgz, zip, plt")]
   [#:bool manifest () "Creates a manifest file for a directory, rather than an archive"]
   #:args (maybe-dir)
-  (create-cmd format manifest maybe-dir)])
+  (create-cmd (if manifest "MANIFEST" format) maybe-dir)])

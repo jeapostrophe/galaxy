@@ -26,12 +26,12 @@
                    "test-pkgs/galaxy-test1.zip")
    (shelly-install "remove of dep fails"
                    "test-pkgs/galaxy-test1.zip"
-                   $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1      59293a39c0eb2eedb84e630a681c8c501f1d472a    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip)\n"
+                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\n"
                    $ "raco pkg install test-pkgs/galaxy-test2.zip"
-                   $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1      59293a39c0eb2eedb84e630a681c8c501f1d472a    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip)\ngalaxy-test2      a465fd3a36431ddfc518a4551de9b7387cf464c8    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip)\n"
+                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\ngalaxy-test2      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip\\)\n"
                    $ "raco pkg remove galaxy-test1" =exit> 1
                    $ "raco pkg remove galaxy-test2"
-                   $ "raco pkg show" =stdout>  "Package(auto?)    Checksum                                    Source\ngalaxy-test1      59293a39c0eb2eedb84e630a681c8c501f1d472a    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip)\n")
+                   $ "raco pkg show" =stdout>  #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\n")
    (shelly-install "remove of dep can be forced"
                    "test-pkgs/galaxy-test1.zip"
                    $ "raco pkg install test-pkgs/galaxy-test2.zip"
@@ -59,12 +59,12 @@
      $ "racket -e '(require galaxy-test1)'" =exit> 1
      $ "racket -e '(require galaxy-test2)'" =exit> 1
      $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
-     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pns galaxy-test1)\ngalaxy-test2      a465fd3a36431ddfc518a4551de9b7387cf464c8    (file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip)\n"
+     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1\\*     [a-f0-9]+    \\(pns galaxy-test1\\)\ngalaxy-test2      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip\\)\n"
      $ "racket -e '(require galaxy-test1)'" =exit> 0
      $ "racket -e '(require galaxy-test2)'" =exit> 0
      $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
      $ "raco pkg remove galaxy-test2"
-     $ "raco pkg show" =stdout> "Package(auto?)    Checksum                                    Source\ngalaxy-test1*     59293a39c0eb2eedb84e630a681c8c501f1d472a    (pns galaxy-test1)\n"
+     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1\\*     [a-f0-9]+    \\(pns galaxy-test1\\)\n"
      $ "racket -e '(require galaxy-test1)'" =exit> 0
      $ "raco pkg remove --auto"
      $ "raco pkg show" =stdout> "Package(auto?)    Checksum    Source\n"

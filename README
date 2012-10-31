@@ -230,13 +230,15 @@ implementation and its use simple.
 ** DONE Write the library interface (for DrR usage)
    CLOSED: [2012-10-30 Tue 15:57]
 ** TODO Test the library interface
+** TODO remove tmp dir and just use system's
+** TODO cache downloads during dep search (planet test is unbearable) [or just preserve install-info from one round to the next]
+** TODO Test against the main server
+** TODO Finish the main server (functionality)
+** TODO Write documentation (convert this document but remove single collect packages)
 ** TODO Create initial packages (my own)
 ** TODO Email current popular package owners to help them convert
-** TODO Finish the main server (style)
-** TODO Finish the main server (functionality)
 ** TODO Change name from galaxy to p2
-** TODO Test against the main server
-** TODO Write documentation (convert this document but remove single collect packages)
+** TODO Finish the main server (style)
 ** TODO Email adm about the project
 ** TODO Email dev about the deployment
 * More things to do in the future

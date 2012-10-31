@@ -1,6 +1,7 @@
 #lang racket/base
 (require (for-syntax racket/base
                      "util.rkt")
+         "shelly.rkt"
          "util.rkt")
 
 ;; By making these syntax-time includes, it made it so they would be
@@ -23,13 +24,16 @@
 (define (run-tests* l)
   (run-pkg-tests*
    (λ ()
-     (for-each (λ (x) (x)) l))))
+     (shelly-case "All tests"
+                  (for-each (λ (x) (x)) l)))))
 
 (run-tests
  "basic" "create" "install"
  "network" "conflicts" "checksums"
- "deps" "update" "remove"
- "locking" "overwrite"
+ "deps" "update" 
+ "remove"
+ "locking"
+ "overwrite"
  "config"
  "planet"
  "update-deps"

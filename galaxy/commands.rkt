@@ -20,7 +20,7 @@
              #:attr fun #'(λ () #t)]
     [pattern (#:sym default:expr)
              #:attr (arg-val 1) (list #'string)
-             #:attr fun #'symbol->string]
+             #:attr fun #'string->symbol]
     [pattern (#:str default:expr)
              #:attr (arg-val 1) (list #'string)
              #:attr fun #'identity])
@@ -69,7 +69,19 @@
                 #:once-each
                 o.command-line ...
                 #:args args
-                (name o.call ... ... . args)])]))
+                (args-app args (name o.call ... ...))])]))
+
+(define-syntax (args-app stx)
+  (syntax-parse stx
+    [(_ () (call ...))
+     (syntax/loc stx
+       (call ...))]
+    [(_ rest:id (call ...))
+     (syntax/loc stx
+       (apply call ... rest))]
+    [(_ (fst . snd) (call ...))
+     (syntax/loc stx
+       (args-app snd (call ... fst)))]))
 
 (define-syntax (commands stx)
   (syntax-parse stx

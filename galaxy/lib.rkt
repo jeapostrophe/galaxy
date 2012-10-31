@@ -70,10 +70,8 @@
           (unless fail-okay?
             (raise x)))])
     (make-parent-directory* file)
-    (printf "\t\tDownloading ~a to ~a\n" (url->string url) file)
-    (call-with-output-file
-        file
-      #:exists 'replace
+    (dprintf "\t\tDownloading ~a to ~a\n" (url->string url) file)
+    (call-with-output-file file
       (λ (op)
         (call/input-url+200
          url
@@ -94,6 +92,9 @@
   (build-path (pkg-dir) "installed"))
 (define (pkg-lock-file)
   (make-lock-file-name (pkg-db-file)))
+
+(for-each make-directory* 
+          (list (pkg-dir) (pkg-temporary-dir) (pkg-installed-dir)))
 
 (define (with-package-lock* t)
   (make-directory* (pkg-dir))
@@ -255,7 +256,7 @@
          #:dep-behavior [dep-behavior #f]
          #:updating? [updating? #f]
          #:ignore-checksums? [ignore-checksums? #f]
-         #:link [link? #f]
+         #:link? [link? #f]
          #:force? [force? #f]
          auto+pkgs)
   (define check-sums? (not ignore-checksums?))
@@ -283,23 +284,29 @@
        (define pkg-name
          (or given-pkg-name
              (regexp-replace
-              (regexp (format "~a$" (regexp-quote (format ".~a" pkg-format))))
+              (regexp 
+               (format "~a$" (regexp-quote (format ".~a" pkg-format))))
               (path->string (file-name-from-path pkg))
               "")))
-       (define pkg-dir (build-path (pkg-temporary-dir) pkg-name))
-       (make-directory* pkg-dir)
-       (match pkg-format
-         [#"tgz"
-          (untar pkg pkg-dir)]
-         [#"zip"
-          (system* (find-executable-path "unzip") "-n" pkg "-d" pkg-dir)]
-         [#"plt"
-          (unplt pkg pkg-dir)]
-         [x
-          (error 'pkg "Invalid package format: ~e" x)])
+       (define pkg-dir 
+         (make-temporary-file (string-append "~a-" pkg-name)
+                              'directory (pkg-temporary-dir)))
        (dynamic-wind
            void
            (λ ()
+             (make-directory* pkg-dir)
+
+             (match pkg-format
+               [#"tgz"
+                (untar pkg pkg-dir)]
+               [#"zip"
+                (system* (find-executable-path "unzip")
+                         "-n" pkg "-d" pkg-dir)]
+               [#"plt"
+                (unplt pkg pkg-dir)]
+               [x
+                (error 'pkg "Invalid package format: ~e" x)])
+
              (update-install-info-checksum
               (update-install-info-orig-pkg
                (install-package pkg-dir
@@ -314,14 +321,20 @@
            (or given-pkg-name (path->string (file-name-from-path pkg))))
          (cond
            [link?
-            (install-info pkg-name `(link ,(simple-form-path* pkg)) pkg #f #f)]
+            (install-info pkg-name
+                          `(link ,(simple-form-path* pkg))
+                          pkg
+                          #f #f)]
            [else
             (define pkg-dir
               (make-temporary-file "pkg~a" 'directory (pkg-temporary-dir)))
             (delete-directory pkg-dir)
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
-            (install-info pkg-name `(dir ,(simple-form-path* pkg)) pkg-dir #t #f)]))]
+            (install-info pkg-name
+                          `(dir ,(simple-form-path* pkg)) 
+                          pkg-dir
+                          #t #f)]))]
       [(url-scheme pkg-url)
        =>
        (lambda (scheme)
@@ -340,15 +353,24 @@
                       empty
                       #f))
                (define tmp.tgz
-                 (build-path (pkg-temporary-dir) (format "~a.~a.tgz" repo branch)))
+                 (make-temporary-file 
+                  (string-append 
+                   "~a-"
+                   (format "~a.~a.tgz" repo branch))
+                  #f (pkg-temporary-dir)))
+               (delete-file tmp.tgz)
                (define tmp-dir
-                 (build-path (pkg-temporary-dir) (format "~a.~a" repo branch)))
+                 (make-temporary-file 
+                  (string-append 
+                   "~a-"
+                   (format "~a.~a" repo branch))
+                  'directory (pkg-temporary-dir)))
                (define package-path
                  (apply build-path tmp-dir path))
 
                (dynamic-wind
                    void
-                   (λ ()
+                   (λ ()                     
                      (download-file! new-url tmp.tgz)
                      (dynamic-wind
                          void
@@ -366,40 +388,72 @@
                (define url-looks-like-directory?
                  (string=? "" url-last-component))
                (define-values
-                 (package-path download-package!)
+                 (package-path package-name download-package!)
                  (cond
                    [url-looks-like-directory?
+                    (define package-name
+                      (path/param-path
+                       (second (reverse (url-path pkg-url)))))
                     (define package-path
-                      (build-path (pkg-temporary-dir)
-                                  (path/param-path
-                                   (second (reverse (url-path pkg-url))))))
+                      (make-temporary-file 
+                       (string-append 
+                        "~a-"
+                        package-name)
+                       'directory (pkg-temporary-dir)))
                     (define (path-like f)
                       (build-path package-path f))
                     (define (url-like f)
                       (combine-url/relative pkg-url f))
                     (values package-path
+                            package-name
                             (λ ()
                               (printf "\tCloning remote directory\n")
                               (make-directory* package-path)
                               (define manifest
-                                (call/input-url+200 (url-like "MANIFEST") port->lines))
+                                (call/input-url+200
+                                 (url-like "MANIFEST")
+                                 port->lines))
                               (for ([f (in-list manifest)])
-                                (download-file! (url-like f) (path-like f)))))]
+                                (download-file! (url-like f)
+                                                (path-like f)))))]
                    [else
                     (define package-path
-                      (build-path (pkg-temporary-dir) url-last-component))
+                      (make-temporary-file 
+                       (string-append 
+                        "~a-"
+                        url-last-component)
+                       #f (pkg-temporary-dir)))
+                    (delete-file package-path)
                     (values package-path
+                            (regexp-replace
+                             #rx"\\.[^.]+$"
+                             url-last-component
+                             "")
                             (λ ()
+                              (dprintf "\tAssuming URL names a file\n")
                               (download-file! pkg-url package-path)))]))
                (dynamic-wind
                    void
                    (λ ()
                      (download-package!)
+                     (define pkg-name
+                       (or given-pkg-name
+                           package-name))
+                     (dprintf "\tDownloading done, installing ~a as ~a\n"
+                              package-path pkg-name)
                      (install-package package-path
-                                      #:pkg-name given-pkg-name))
+                                      #:pkg-name 
+                                      pkg-name))
                    (λ ()
-                     (delete-directory/files package-path)))])
+                     (when (or (file-exists? package-path)
+                               (directory-exists? package-path))
+                       (delete-directory/files package-path))))])
             orig-pkg))
+         (when (and check-sums?
+                    (install-info-checksum info)
+                    (not checksum))
+           (error 'galaxy "Remote package ~a had no checksum"
+                  pkg))
          (when (and checksum
                     (install-info-checksum info)
                     check-sums?
@@ -414,7 +468,8 @@
        (define index-info (package-index-lookup pkg))
        (define source (hash-ref index-info 'source))
        (define checksum (hash-ref index-info 'checksum))
-       (define info (install-package source #:pkg-name (or given-pkg-name pkg)))
+       (define info (install-package source
+                                     #:pkg-name (or given-pkg-name pkg)))
        (when (and (install-info-checksum info)
                   check-sums?
                   (not (equal? (install-info-checksum info) checksum)))
@@ -548,6 +603,9 @@
                      #:updating? [updating? #f])
   (with-handlers ([list?
                    (λ (deps)
+                     (dprintf "\nInstallation failed with new deps: ~a\nold was: ~a\n\n"
+                              deps pkgs)
+
                      (install-cmd
                       #:force? force
                       #:link? link
@@ -663,7 +721,7 @@
        [_
         (error 'galaxy "must provide only config key")])]))
 
-(define (create-cmd create:format manifest maybe-dir)
+(define (create-cmd create:format maybe-dir)
   (begin
     (define dir (regexp-replace* #rx"/$" maybe-dir ""))
     (unless (directory-exists? dir)
@@ -718,7 +776,7 @@
    (-> boolean? list?
        void)]
   [create-cmd
-   (-> string? (or/c false/c string?) path-string?
+   (-> string? path-string?
        void)]
   [update-packages
    (->* ((listof string?))
