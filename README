@@ -229,9 +229,11 @@ implementation and its use simple.
 * Things to do before release
 ** DONE Write the library interface (for DrR usage)
    CLOSED: [2012-10-30 Tue 15:57]
-** TODO Test the library interface
+** DONE Test the library interface
+   CLOSED: [2012-10-30 Tue 22:30]
+** DONE cache downloads during dep search (planet test is unbearable) [or just preserve install-info from one round to the next]
+   CLOSED: [2012-10-30 Tue 22:40]
 ** TODO remove tmp dir and just use system's
-** TODO cache downloads during dep search (planet test is unbearable) [or just preserve install-info from one round to the next]
 ** TODO Test against the main server
 ** TODO Finish the main server (functionality)
 ** TODO Write documentation (convert this document but remove single collect packages)

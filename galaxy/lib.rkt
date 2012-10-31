@@ -93,7 +93,7 @@
 (define (pkg-lock-file)
   (make-lock-file-name (pkg-db-file)))
 
-(for-each make-directory* 
+(for-each make-directory*
           (list (pkg-dir) (pkg-temporary-dir) (pkg-installed-dir)))
 
 (define (with-package-lock* t)
@@ -252,6 +252,8 @@
   (for-each remove-package pkgs))
 
 (define (install-packages
+         #:old-infos [old-infos empty]
+         #:old-auto+pkgs [old-auto+pkgs empty]
          #:pre-succeed [pre-succeed void]
          #:dep-behavior [dep-behavior #f]
          #:updating? [updating? #f]
@@ -284,11 +286,11 @@
        (define pkg-name
          (or given-pkg-name
              (regexp-replace
-              (regexp 
+              (regexp
                (format "~a$" (regexp-quote (format ".~a" pkg-format))))
               (path->string (file-name-from-path pkg))
               "")))
-       (define pkg-dir 
+       (define pkg-dir
          (make-temporary-file (string-append "~a-" pkg-name)
                               'directory (pkg-temporary-dir)))
        (dynamic-wind
@@ -332,7 +334,7 @@
             (make-parent-directory* pkg-dir)
             (copy-directory/files pkg pkg-dir)
             (install-info pkg-name
-                          `(dir ,(simple-form-path* pkg)) 
+                          `(dir ,(simple-form-path* pkg))
                           pkg-dir
                           #t #f)]))]
       [(url-scheme pkg-url)
@@ -353,15 +355,15 @@
                       empty
                       #f))
                (define tmp.tgz
-                 (make-temporary-file 
-                  (string-append 
+                 (make-temporary-file
+                  (string-append
                    "~a-"
                    (format "~a.~a.tgz" repo branch))
                   #f (pkg-temporary-dir)))
                (delete-file tmp.tgz)
                (define tmp-dir
-                 (make-temporary-file 
-                  (string-append 
+                 (make-temporary-file
+                  (string-append
                    "~a-"
                    (format "~a.~a" repo branch))
                   'directory (pkg-temporary-dir)))
@@ -370,7 +372,7 @@
 
                (dynamic-wind
                    void
-                   (λ ()                     
+                   (λ ()
                      (download-file! new-url tmp.tgz)
                      (dynamic-wind
                          void
@@ -395,8 +397,8 @@
                       (path/param-path
                        (second (reverse (url-path pkg-url)))))
                     (define package-path
-                      (make-temporary-file 
-                       (string-append 
+                      (make-temporary-file
+                       (string-append
                         "~a-"
                         package-name)
                        'directory (pkg-temporary-dir)))
@@ -418,8 +420,8 @@
                                                 (path-like f)))))]
                    [else
                     (define package-path
-                      (make-temporary-file 
-                       (string-append 
+                      (make-temporary-file
+                       (string-append
                         "~a-"
                         url-last-component)
                        #f (pkg-temporary-dir)))
@@ -442,7 +444,7 @@
                      (dprintf "\tDownloading done, installing ~a as ~a\n"
                               package-path pkg-name)
                      (install-package package-path
-                                      #:pkg-name 
+                                      #:pkg-name
                                       pkg-name))
                    (λ ()
                      (when (or (file-exists? package-path)
@@ -535,13 +537,13 @@
                unsatisfied-deps)))
        =>
        (λ (unsatisfied-deps)
-         (clean!)
          (match
              (or dep-behavior
                  (if pns?
                    'search-ask
                    'fail))
            ['fail
+            (clean!)
             (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
            ['search-auto
             (printf "The following packages are listed as dependencies, but are not currently installed, so we will automatically install them.\n")
@@ -549,7 +551,7 @@
             (for ([p (in-list unsatisfied-deps)])
               (printf "~a " p))
             (printf "\n")
-            (raise unsatisfied-deps)]
+            (raise (vector infos unsatisfied-deps))]
            ['search-ask
             (printf "The following packages are listed as dependencies, but are not currently installed:\n")
             (printf "\t")
@@ -561,8 +563,9 @@
               (flush-output)
               (match (read-line)
                 [(or "y" "Y" "")
-                 (raise unsatisfied-deps)]
+                 (raise (vector infos unsatisfied-deps))]
                 [(or "n" "N")
+                 (clean!)
                  (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
                 [x
                  (eprintf "Invalid input: ~e\n" x)
@@ -590,31 +593,40 @@
   (define infos
     (map install-package (map cdr auto+pkgs)))
   (define do-its
-    (map (curry install-package/outer infos) auto+pkgs infos))
+    (map (curry install-package/outer (append old-infos infos))
+         (append old-auto+pkgs auto+pkgs)
+         (append old-infos infos)))
   (pre-succeed)
   (for-each (λ (t) (t)) do-its))
 
 (define (install-cmd pkgs
+                     #:old-infos [old-infos empty]
+                     #:old-auto+pkgs [old-auto+pkgs empty]
                      #:force? [force #f]
                      #:link? [link #f]
                      #:ignore-checksums? [ignore-checksums #f]
                      #:pre-succeed [pre-succeed void]
                      #:dep-behavior [dep-behavior #f]
                      #:updating? [updating? #f])
-  (with-handlers ([list?
-                   (λ (deps)
-                     (dprintf "\nInstallation failed with new deps: ~a\nold was: ~a\n\n"
-                              deps pkgs)
+  (with-handlers ([vector?
+                   (match-lambda
+                    [(vector new-infos deps)
+                     (dprintf "\nInstallation failed with new deps: ~a\n\n"
+                              deps)
 
                      (install-cmd
+                      #:old-infos new-infos
+                      #:old-auto+pkgs (append old-auto+pkgs pkgs)
                       #:force? force
                       #:link? link
                       #:ignore-checksums? ignore-checksums
                       #:dep-behavior dep-behavior
                       #:pre-succeed pre-succeed
                       #:updating? updating?
-                      (append (map (curry cons #t) deps) pkgs)))])
+                      (map (curry cons #t) deps))])])
     (install-packages
+     #:old-infos old-infos
+     #:old-auto+pkgs old-auto+pkgs
      #:force? force
      #:link? link
      #:ignore-checksums? ignore-checksums
@@ -622,6 +634,7 @@
      #:pre-succeed pre-succeed
      #:updating? updating?
      pkgs)
+    #;
     (system "raco setup")))
 
 (define (update-is-possible? pkg-name)
