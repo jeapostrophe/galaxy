@@ -2,12 +2,15 @@
 (require web-server/http
          web-server/servlet-env
          racket/file
+         racket/function
          racket/runtime-path
          web-server/dispatch
          galaxy/util
          racket/match
          racket/package
          racket/system
+         racket/date
+         racket/string
          web-server/servlet
          web-server/formlets
          racket/bool
@@ -52,9 +55,10 @@
                 [(or 'author 'checksum 'source)
                  (error 'galaxy "Package ~e is missing a required field: ~e"
                         (hash-ref pkg-info 'name) key)]
-                ['tags empty]))))
-
-(define .... "....")
+                ['tags
+                 empty]
+                [(or 'last-checked 'last-edit 'last-updated)
+                 -inf.0]))))
 
 (define-values (main-dispatch main-url)
   (dispatch-rules
@@ -62,6 +66,7 @@
    [("") page/main]
    [("info" (string-arg)) page/info]
    [("search" (string-arg) ...) page/search]
+   [("query" "search") page/search/query]
    [("login") page/login]
    [("manage") page/manage]
    [("manage" "update") page/manage/update]
@@ -72,13 +77,83 @@
 (define (page/main req)
   (page/search req empty))
 
+(define (format-time s)
+  (parameterize ([date-display-format 'rfc2822])
+    (date->string (seconds->date s #f) #t)))
+
+(define (package-url->useful-url pkg-url-str)
+  (define pkg-url
+    (string->url pkg-url-str))
+  (match (url-scheme pkg-url)
+    ["github"
+     (match-define (list* user repo branch path)
+                   (url-path pkg-url))
+     (url->string
+      (struct-copy url pkg-url
+                   [scheme "http"]
+                   [path (list* user repo (path/param "tree" empty) branch path)]))]
+    [_
+     pkg-url-str]))
+
 (define (page/info req pkg-name)
   (define i (package-info pkg-name))
-  (template
-   (list "Package" pkg-name)
-   ....
-   ;; XXX links to add tags
-   ....))
+  (define author (package-ref i 'author))
+  (define (add-tag req)
+    ;; XXX disallow spaces and :
+    (package-info-set!
+     pkg-name
+     (hash-update i 'tags
+                  (λ (old)
+                    (sort (cons (formlet-process add-tag-formlet req)
+                                old)
+                          string-ci<?))
+                  empty))
+    (redirect-to (main-url page/info pkg-name)))
+  (define add-tag-formlet
+    (formlet
+     ,{(to-string (required (text-input))) . => . tag}
+     tag))
+  (send/suspend/dispatch
+   (λ (embed/url)
+     (template
+      (list "Package" pkg-name)
+      `(table
+        (tr
+         (td "Name")
+         (td ,pkg-name))
+        (tr
+         (td "Author")
+         (td (a ([href ,(main-url page/search (list (format "author:~a" author)))])
+                ,author)))
+        (tr
+         (td "Source")
+         (td (a ([href ,(package-url->useful-url (package-ref i 'source))])
+                ,(package-ref i 'source))))
+        (tr
+         (td "Checksum")
+         (td ,(package-ref i 'checksum)))
+        (tr
+         (td "Last Update")
+         (td ,(format-time (package-ref i 'last-updated))))
+        (tr
+         (td "Last Checked")
+         (td ,(format-time (package-ref i 'last-checked))))
+        (tr
+         (td "Description")
+         (td ,(package-ref i 'description)))
+        (tr
+         (td "Last Edit")
+         (td ,(format-time (package-ref i 'last-edit))))
+        (tr
+         (td "Tags")
+         (td
+          (ul
+           ,@(for/list ([t (in-list (package-ref i 'tags))])
+               `(li (a ([href ,(main-url page/search (list t))])
+                       ,t)))
+           (li (form ([action ,(embed/url add-tag)])
+                     ,@(formlet-display add-tag-formlet)
+                     (input ([type "submit"] [value "Add Tag"]))))))))))))
 
 (define (search-term-eval pkg-name info term)
   (match term
@@ -119,12 +194,32 @@
        (search-term-eval p i t)))
    (package-list)))
 
+(define (search-formlet old-terms)
+  (formlet
+   ,{(to-string 
+      (required
+       (text-input
+        #:value
+        (string->bytes/utf-8
+         (apply string-append
+                (add-between old-terms " "))))))
+     . => . new-terms}
+   (string-split new-terms)))
+
+(define (page/search/query req)
+  (define terms (formlet-process (search-formlet empty) req))
+  (redirect-to (page/search req terms)))
+
 (define (page/search req terms)
   (define pkgs (package-list/search terms))
   ;; XXX mention author:... format
   (template
-   (list "Packages")
-   ;; XXX display the current search terms
+   (list "Packages"
+         ;; XXX breadcrumb terms
+         )
+   `(form ([action ,(main-url page/search/query)])
+          ,@(formlet-display (search-formlet terms))
+          (input ([type "submit"] [value "Search"])))
    `(a ([href ,(main-url page/manage)])
        ,(if (current-user req #f)
           "Manage Your Packages"
@@ -136,7 +231,6 @@
   (redirect-to (main-url page/main)))
 
 (define (login req [last-error #f])
-  ;; XXX look nice
   (define login-formlet
     (formlet
      (table
@@ -224,23 +318,30 @@
 (define (package-table page/package pkgs)
   `(table
     ([class "packages sortable"])
-    (tr (th "Package") (th "Author") (th "Description") (th "Tags"))
-    ,@(for/list ([p (in-list pkgs)])
-        (define i (package-info p))
-        (define author (package-ref i 'author))
-        ;; XXX highlight recently updated/checked packages
-        `(tr
-          (td (a ([href ,(main-url page/package p)])
-                 ,p))
-          (td (a ([href ,(main-url page/search (list (format "author:~a" author)))])
-                 ,author))
-          (td ,(package-ref i 'description))
-          (td ,@(package-ref i 'tags))))))
+    (thead
+     (tr (th "Package") (th "Author") (th "Description") (th "Tags")))
+    (tbody
+     ,@(for/list ([p (in-list pkgs)])
+         (define i (package-info p))
+         (define author (package-ref i 'author))
+         `(tr ([class ,(if (< (- (current-seconds) (* 2 24 60 60))
+                              (package-ref i 'last-updated))
+                         "recent"
+                         "")])
+              (td (a ([href ,(main-url page/package p)])
+                     ,p))
+              (td (a ([href ,(main-url page/search (list (format "author:~a" author)))])
+                     ,author))
+              (td ,(package-ref i 'description))
+              (td ,@(for/list ([t (in-list (package-ref i 'tags))])
+                      `(span (a ([href ,(main-url page/search (list t))])
+                                ,t)
+                             " "))))))))
 
 (define (page/manage req)
   (define pkgs (package-list/mine req))
   (template
-   (list "Manage My Packages")
+   (list "Main" "Manage My Packages")
    `(a ([href ,(main-url page/manage/upload)])
        "Upload a new package")
    `(a ([href ,(main-url page/manage/update)])
@@ -264,7 +365,8 @@
                          (package-ref i 'source)
                          (package-ref i 'description))))]))
 
-  ;; XXX look nice, make wider, mention valid source format
+  ;; XXX make wider, mention valid source format
+  ;; XXX let the owner delete tags
   (define pkg-formlet
     (formlet
      (table
