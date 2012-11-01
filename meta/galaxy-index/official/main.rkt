@@ -99,12 +99,15 @@
   (define i (package-info pkg-name))
   (define author (package-ref i 'author))
   (define (add-tag req)
-    ;; XXX disallow spaces and :
+    (define new-tag
+      (formlet-process add-tag-formlet req))
+    (when (regexp-match #rx"[^a-zA-Z0-9]" new-tag)
+      (error 'galaxy "Illegal character in tag; only alphanumerics allowed: ~e" new-tag))
     (package-info-set!
      pkg-name
      (hash-update i 'tags
                   (λ (old)
-                    (sort (cons (formlet-process add-tag-formlet req)
+                    (sort (cons new-tag
                                 old)
                           string-ci<?))
                   empty))
@@ -208,15 +211,13 @@
 
 (define (page/search/query req)
   (define terms (formlet-process (search-formlet empty) req))
-  (redirect-to (page/search req terms)))
+  (redirect-to (main-url page/search terms)))
 
 (define (page/search req terms)
   (define pkgs (package-list/search terms))
-  ;; XXX mention author:... format
   (template
-   (list "Packages"
-         ;; XXX breadcrumb terms
-         )
+   (list* "Packages"
+          terms)
    `(form ([action ,(main-url page/search/query)])
           ,@(formlet-display (search-formlet terms))
           (input ([type "submit"] [value "Search"])))
@@ -367,6 +368,7 @@
 
   ;; XXX make wider, mention valid source format
   ;; XXX let the owner delete tags
+  ;; XXX add check button
   (define pkg-formlet
     (formlet
      (table
