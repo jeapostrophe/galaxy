@@ -46,6 +46,8 @@
 (define (package-list)
   (sort (map path->string (directory-list pkgs-path))
         string-ci<=?))
+(define (package-exists? pkg-name)
+  (file-exists? (build-path pkgs-path pkg-name)))
 (define (package-remove! pkg-name)
   (delete-file (build-path pkgs-path pkg-name)))
 (define (package-info pkg-name)
@@ -53,6 +55,7 @@
 (define (package-info-set! pkg-name i)
   (write-to-file i (build-path pkgs-path pkg-name)
                  #:exists 'replace))
+
 (define (package-ref pkg-info key)
   (hash-ref pkg-info key
             (λ ()
@@ -382,7 +385,12 @@
              "Illegal character in name; only alphanumerics, plus '-' and '_' allowed: ~e"
              new-pkg))
 
-    ;; XXX make sure we are not deleting a package current-user didn't make
+    (when (and (package-exists? new-pkg)
+               (not (equal? (package-ref (package-info new-pkg) 'author)
+                            (current-user pkg-req #t))))
+      (error 'galaxy
+             "Packages may only be modified by their authors: ~e"
+             new-pkg))
 
     (package-begin
      (define* i
@@ -395,7 +403,7 @@
      (define* i
        (hash-set i 'source new-source))
      (define* i
-       (hash-set i 'author (current-user req #t)))
+       (hash-set i 'author (current-user pkg-req #t)))
      (define* i
        (hash-set i 'description new-desc))
      (define* i
