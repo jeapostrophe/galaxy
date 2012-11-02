@@ -84,11 +84,23 @@ table.packages tbody tr:nth-child(2n) {
     margin-right: 15%;
     border: 1px dotted;
 }
+.package table tr {
+    width: 100%;
+}
 .package table td {
     vertical-align: top;
+    height: 2em;
+}
+.package table tr:nth-child(3) td {
+    height: 2.5em;
+}
+.package table tr:nth-child(7) td {
+    height: 3.5em;
 }
 .package table td:nth-child(1) {
     text-align: right;
+    font-weight: bold;
+    width: 15%;
 }
 .package table td:nth-child(2) {
     text-align: left;
