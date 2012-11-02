@@ -25,6 +25,9 @@
       e ...
       (loop))))
 
+(define (snoc l x)
+  (append l (list x)))
+
 (define-runtime-path src ".")
 
 (define-runtime-path root "root")
@@ -36,6 +39,8 @@
 (make-directory* users-path)
 (define pkgs-path (build-path root "pkgs"))
 (make-directory* pkgs-path)
+
+(define id-cookie-name "id")
 
 ;; XXX Add a caching system
 (define (package-list)
@@ -66,8 +71,9 @@
    [("") page/main]
    [("info" (string-arg)) page/info]
    [("search" (string-arg) ...) page/search]
-   [("query" "search") page/search/query]
-   [("login") page/login]
+   [("query" "search" (string-arg) ...) page/search/query]
+   [("account" "login") page/login]
+   [("account" "logout") page/logout]
    [("manage") page/manage]
    [("manage" "update") page/manage/update]
    [("manage" "edit" (string-arg)) page/manage/edit]
@@ -75,7 +81,7 @@
    [else basic-start]))
 
 (define (page/main req)
-  (page/search req empty))
+  (redirect-to (main-url page/search empty)))
 
 (define (format-time s)
   (parameterize ([date-display-format 'rfc2822])
@@ -119,44 +125,49 @@
   (send/suspend/dispatch
    (λ (embed/url)
      (template
-      (list "Package" pkg-name)
-      `(table
-        (tr
-         (td "Name")
-         (td ,pkg-name))
-        (tr
-         (td "Author")
-         (td (a ([href ,(main-url page/search (list (format "author:~a" author)))])
-                ,author)))
-        (tr
-         (td "Source")
-         (td (a ([href ,(package-url->useful-url (package-ref i 'source))])
-                ,(package-ref i 'source))))
-        (tr
-         (td "Checksum")
-         (td ,(package-ref i 'checksum)))
-        (tr
-         (td "Last Update")
-         (td ,(format-time (package-ref i 'last-updated))))
-        (tr
-         (td "Last Checked")
-         (td ,(format-time (package-ref i 'last-checked))))
-        (tr
-         (td "Description")
-         (td ,(package-ref i 'description)))
-        (tr
-         (td "Last Edit")
-         (td ,(format-time (package-ref i 'last-edit))))
-        (tr
-         (td "Tags")
-         (td
-          (ul
-           ,@(for/list ([t (in-list (package-ref i 'tags))])
-               `(li (a ([href ,(main-url page/search (list t))])
-                       ,t)))
-           (li (form ([action ,(embed/url add-tag)])
-                     ,@(formlet-display add-tag-formlet)
-                     (input ([type "submit"] [value "Add Tag"]))))))))))))
+      req
+      #:breadcrumb
+      (list (cons "Packages" (main-url page/main))
+            pkg-name)
+      `(div ([class "package"])
+            (table
+             (tr
+              (td "Name")
+              (td ,pkg-name))
+             (tr
+              (td "Author")
+              (td (a ([href ,(main-url page/search
+                                       (list (format "author:~a" author)))])
+                     ,author)))
+             (tr
+              (td "Source")
+              (td (a ([href ,(package-url->useful-url (package-ref i 'source))])
+                     ,(package-ref i 'source))))
+             (tr
+              (td "Checksum")
+              (td ,(package-ref i 'checksum)))
+             (tr
+              (td "Last Update")
+              (td ,(format-time (package-ref i 'last-updated))))
+             (tr
+              (td "Last Checked")
+              (td ,(format-time (package-ref i 'last-checked))))
+             (tr
+              (td "Description")
+              (td ,(package-ref i 'description)))
+             (tr
+              (td "Last Edit")
+              (td ,(format-time (package-ref i 'last-edit))))
+             (tr
+              (td "Tags")
+              (td
+               (ul
+                ,@(for/list ([t (in-list (package-ref i 'tags))])
+                    `(li (a ([href ,(main-url page/search (list t))])
+                            ,t)))
+                (li (form ([action ,(embed/url add-tag)])
+                          ,@(formlet-display add-tag-formlet)
+                          (input ([type "submit"] [value "Add Tag"])))))))))))))
 
 (define (search-term-eval pkg-name info term)
   (match term
@@ -167,7 +178,22 @@
      (for/or ([tag (list* pkg-name (package-ref info 'tags))])
        (regexp-match? term-rx tag))]))
 
-(define (template title . xexpr-forest)
+(define breadcrumb->string
+  (match-lambda
+   [(? string? label)
+    label]
+   [(cons (? string? label)
+          (? string? url))
+    label]))
+(define breadcrumb->xexpr
+  (match-lambda
+   [(? string? label)
+    `(span ,label)]
+   [(cons (? string? label)
+          (? string? url))
+    `(span (a ([href ,url]) ,label))]))
+
+(define (template req #:breadcrumb bc . xexpr-forest)
   (send/back
    (response/xexpr
     `(html
@@ -176,11 +202,19 @@
        (link ([rel "stylesheet"]
               [type "text/css"]
               [href "/style.css"]))
-       (title ,@title))
+       (title ,@(add-between (map breadcrumb->string bc) " > ")))
       (body
-       ;; XXX racket header
-       ;; XXX breadcrumb
-       (h1 ,@title)
+       (div ([class "breadcrumb"])
+            ,@(add-between (map breadcrumb->xexpr bc) " > ")
+            ,(cond
+               [(current-user req #f)
+                => (λ (user)
+                     `(span ([id "logout"])
+                            ,user
+                            " | "
+                            (a ([href ,(main-url page/logout)]) "logout")))]
+               [else
+                ""]))
        ,@xexpr-forest
        (div ([id "footer"])
             "Powered by "
@@ -188,6 +222,12 @@
             "Written by "
             (a ([href "http://faculty.cs.byu.edu/~jay"]) "Jay McCarthy")
             "."))))))
+
+(define (page/logout req)
+  (redirect-to
+   (main-url page/main)
+   #:headers
+   (list (cookie->header (logout-id-cookie id-cookie-name)))))
 
 (define (package-list/search ts)
   (filter
@@ -197,35 +237,36 @@
        (search-term-eval p i t)))
    (package-list)))
 
-(define (search-formlet old-terms)
+(define search-formlet
   (formlet
-   ,{(to-string 
-      (required
-       (text-input
-        #:value
-        (string->bytes/utf-8
-         (apply string-append
-                (add-between old-terms " "))))))
+   ,{(to-string (required (text-input)))
      . => . new-terms}
    (string-split new-terms)))
 
-(define (page/search/query req)
-  (define terms (formlet-process (search-formlet empty) req))
-  (redirect-to (main-url page/search terms)))
+(define (page/search/query req old-terms)
+  (define terms (formlet-process search-formlet req))
+  (redirect-to (main-url page/search (append old-terms terms))))
 
 (define (page/search req terms)
   (define pkgs (package-list/search terms))
   (template
-   (list* "Packages"
-          terms)
-   `(form ([action ,(main-url page/search/query)])
-          ,@(formlet-display (search-formlet terms))
-          (input ([type "submit"] [value "Search"])))
-   `(a ([href ,(main-url page/manage)])
-       ,(if (current-user req #f)
-          "Manage Your Packages"
-          "Contribute a Package"))
-   (package-table page/info pkgs)))
+   req
+   #:breadcrumb
+   (list* (cons "Packages" (main-url page/main))
+          "Search"
+          (for/list ([t (in-list terms)])
+            (cons t (main-url page/search (remove* (list t) terms)))))
+   `(div ([id "menu"])
+         (form ([action ,(main-url page/search/query terms)])
+               (span ([class "menu_option"])
+                     ,@(formlet-display search-formlet)
+                     (input ([type "submit"] [value "Search"])))
+               (span ([class "menu_option"])
+                     (a ([href ,(main-url page/manage)])
+                        ,(if (current-user req #f)
+                           "Manage Your Packages"
+                           "Contribute a Package")))))
+   (package-table page/info pkgs #:terms terms)))
 
 (define (page/login req)
   (login req)
@@ -244,6 +285,8 @@
     (send/suspend
      (λ (k-url)
        (template
+        req
+        #:breadcrumb
         (list "Login")
         `(div ([id "login"])
               (form ([action ,k-url] [method "post"])
@@ -262,12 +305,14 @@
      #:headers
      (list
       (cookie->header
-       (make-id-cookie "id" secret-key email)))))
+       (make-id-cookie id-cookie-name secret-key email)))))
 
   (when (regexp-match (regexp-quote "/") email)
     (send/back
      (template
-      (list "Account Registration Error")
+      log-req
+      #:breadcrumb
+      (list "Login" "Account Registration Error")
       `(p "Email addresses may not contain / on Galaxy:"
           (tt ,email)))))
 
@@ -288,7 +333,9 @@
                ""
                "This link will expire, so if it is not available, you'll have to try to register again."))
         (template
-         (list "Account Registration")
+         log-req
+         #:breadcrumb
+         (list "Login" "Account Registration")
          `(p "An email has been sent to "
              (tt ,email)
              ", please click the link it contains to register and log in."))))
@@ -303,7 +350,7 @@
 
 (define (current-user req required?)
   (define id
-    (request-id-cookie "id" secret-key req))
+    (request-id-cookie id-cookie-name secret-key req))
   (cond
     [id
      id]
@@ -316,7 +363,8 @@
   (define u (current-user req #t))
   (package-list/search (list (format "author:~a" u))))
 
-(define (package-table page/package pkgs)
+(define (package-table page/package pkgs
+                       #:terms [terms empty])
   `(table
     ([class "packages sortable"])
     (thead
@@ -325,28 +373,38 @@
      ,@(for/list ([p (in-list pkgs)])
          (define i (package-info p))
          (define author (package-ref i 'author))
-         `(tr ([class ,(if (< (- (current-seconds) (* 2 24 60 60))
-                              (package-ref i 'last-updated))
-                         "recent"
-                         "")])
-              (td (a ([href ,(main-url page/package p)])
-                     ,p))
-              (td (a ([href ,(main-url page/search (list (format "author:~a" author)))])
-                     ,author))
-              (td ,(package-ref i 'description))
-              (td ,@(for/list ([t (in-list (package-ref i 'tags))])
-                      `(span (a ([href ,(main-url page/search (list t))])
-                                ,t)
-                             " "))))))))
+         `(tr
+           ([class ,(if (< (- (current-seconds) (* 2 24 60 60))
+                           (package-ref i 'last-updated))
+                      "recent"
+                      "")])
+           (td (a ([href ,(main-url page/package p)])
+                  ,p))
+           (td (a ([href ,(main-url page/search
+                                    (snoc terms
+                                          (format "author:~a" author)))])
+                  ,author))
+           (td ,(package-ref i 'description))
+           (td ,@(for/list ([t (in-list (package-ref i 'tags))])
+                   `(span (a ([href ,(main-url page/search (snoc terms t))])
+                             ,t)
+                          " "))))))))
 
 (define (page/manage req)
   (define pkgs (package-list/mine req))
   (template
-   (list "Main" "Manage My Packages")
-   `(a ([href ,(main-url page/manage/upload)])
-       "Upload a new package")
-   `(a ([href ,(main-url page/manage/update)])
-       "Update checksums")
+   req
+   #:breadcrumb
+   (list (cons "Packages" (main-url page/main))
+         (current-user req #t)
+         "Manage")
+   `(div ([id "menu"])
+         (span ([class "menu_option"])
+               (a ([href ,(main-url page/manage/upload)])
+                  "Upload a new package"))
+         (span ([class "menu_option"])
+               (a ([href ,(main-url page/manage/update)])
+                  "Update checksums")))
    (package-table page/manage/edit pkgs)))
 
 (define (page/manage/upload req)
@@ -366,28 +424,36 @@
                          (package-ref i 'source)
                          (package-ref i 'description))))]))
 
-  ;; XXX make wider, mention valid source format
+  ;; XXX mention valid source format
   ;; XXX let the owner delete tags
-  ;; XXX add check button
   (define pkg-formlet
     (formlet
      (table
-      (tr (td "Package:")
+      (tr (td "Name")
           (td  ,{(to-string (required (text-input #:value pkg-name-bs))) . => . package}))
-      (tr (td "Source:")
+      (tr (td "Source")
           (td ,{(to-string (required (text-input #:value pkg-source-bs))) . => . source}))
-      (tr (td "Description:")
-          (td ,{(to-string (required (textarea-input #:value pkg-desc-bs))) . => . desc})))
+      (tr (td "Description")
+          (td ,{(to-string (required (textarea-input #:value pkg-desc-bs))) . => . desc}))
+      (tr (td ([class "submit"] [colspan "2"])
+              (input ([type "submit"] [value "Submit"])))))
      (values package source desc)))
   (define pkg-req
     (send/suspend
      (λ (k-url)
        (template
-        (list "Manage" (if pkg "Edit" "Upload"))
-        `(div ([class "pkg_edit"])
+        req
+        #:breadcrumb
+        (list* (cons "Packages" (main-url page/main))
+               (current-user req #t)
+               (cons "Manage" (main-url page/manage))
+               (if pkg
+                 (list pkg
+                       "Edit")
+                 (list "Upload")))
+        `(div ([class "package"])
               (form ([action ,k-url] [method "post"])
-                    ,@(formlet-display pkg-formlet)
-                    (input ([type "submit"] [value "Submit"]))))))))
+                    ,@(formlet-display pkg-formlet)))))))
   (define-values
     (new-pkg new-source new-desc)
     (formlet-process pkg-formlet pkg-req))
@@ -457,9 +523,11 @@
   (galaxy-index/basic package-list package-info))
 
 (define (go port)
+  (printf "launching on port ~a\n" port)
   (thread
    (λ ()
      (while true
+       (printf "updating checksums\n")
        (update-checksums (package-list))
        ;; update once per day based on whenever the server started
        (sleep (* 24 60 60)))))
