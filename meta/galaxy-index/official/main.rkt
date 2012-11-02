@@ -84,8 +84,10 @@
   (redirect-to (main-url page/search empty)))
 
 (define (format-time s)
-  (parameterize ([date-display-format 'rfc2822])
-    (date->string (seconds->date s #f) #t)))
+  (if s
+    (parameterize ([date-display-format 'rfc2822])
+      (date->string (seconds->date s #f) #t))
+    ""))
 
 (define (package-url->useful-url pkg-url-str)
   (define pkg-url
@@ -368,10 +370,18 @@
 (define (page/manage/edit req pkg)
   (define (edit-details pkg-req)
     (define new-pkg (request-binding/string pkg-req "name"))
+    (when (string=? new-pkg "")
+      (error 'galaxy "Name must not be empty: ~e" new-pkg))
     (define new-source (request-binding/string pkg-req "source"))
+    (when (string=? new-source "")
+      (error 'galaxy "Source must not be empty: ~e" new-source))
     (define new-desc (request-binding/string pkg-req "description"))
 
-    ;; XXX validate name
+    (when (regexp-match #rx"[^a-zA-Z0-9_\\-]" new-pkg)
+      (error 'galaxy
+             "Illegal character in name; only alphanumerics, plus '-' and '_' allowed: ~e"
+             new-pkg))
+
     ;; XXX make sure we are not deleting a package current-user didn't make
 
     (package-begin
@@ -469,8 +479,12 @@
 
   (send/suspend/dispatch
    (λ (embed/url)
-     (define i (package-info pkg-name))
-     (define author (package-ref i 'author))
+     (define i (and pkg-name (package-info pkg-name)))
+     (define (package-ref* i id def)
+       (if i
+         (package-ref i id)
+         def))
+     (define author (package-ref* i 'author ""))
      (define the-table
        `(table
          (tr
@@ -478,7 +492,7 @@
           (td ,(if edit-details
                  `(input ([name "name"]
                           [type "text"]
-                          [value ,pkg-name]))
+                          [value ,(or pkg-name "")]))
                  pkg-name)))
          (tr
           (td "Author")
@@ -491,33 +505,34 @@
            ,(if edit-details
               `(span (input ([name "source"]
                              [type "text"]
-                             [value ,(package-ref i 'source)]))
+                             [value ,(package-ref* i 'source "")]))
                      " (" (a ([href "XXX"]) "details") ")")
-              `(a ([href ,(package-url->useful-url (package-ref i 'source))])
-                  ,(package-ref i 'source)))))
+              `(a ([href
+                    ,(package-url->useful-url (package-ref i 'source))])
+                  ,(package-ref i 'source "")))))
          (tr
           (td "Checksum")
-          (td ,(package-ref i 'checksum)))
+          (td ,(package-ref* i 'checksum "")))
          (tr
           (td "Last Update")
-          (td ,(format-time (package-ref i 'last-updated))))
+          (td ,(format-time (package-ref* i 'last-updated #f))))
          (tr
           (td "Last Checked")
-          (td ,(format-time (package-ref i 'last-checked))))
+          (td ,(format-time (package-ref* i 'last-checked #f))))
          (tr
           (td "Description")
           (td ,(if edit-details
                  `(textarea ([name "description"])
-                            ,(package-ref i 'description))
+                            ,(package-ref* i 'description ""))
                  (package-ref i 'description))))
          (tr
           (td "Last Edit")
-          (td ,(format-time (package-ref i 'last-edit))))
+          (td ,(format-time (package-ref* i 'last-edit #f))))
          (tr
           (td "Tags")
           (td
            (ul
-            ,@(for/list ([t (in-list (package-ref i 'tags))])
+            ,@(for/list ([t (in-list (package-ref* i 'tags empty))])
                 `(li (a ([href ,(tag-url embed/url t)])
                         ,t)))
             ,(if pkg-name
