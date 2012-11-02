@@ -241,7 +241,8 @@ implementation and its use simple.
    CLOSED: [2012-10-31 Wed 15:42]
 ** DONE Finish the main server (style)
    CLOSED: [2012-11-01 Thu 21:53]
-** TODO Finish the main server (functionality)
+** DONE Finish the main server (functionality)
+   CLOSED: [2012-11-01 Thu 22:12]
 ** TODO Write documentation (convert this document but remove single collect packages)
 ** TODO Create initial packages (my own)
 ** TODO Email current popular package owners to help them convert
