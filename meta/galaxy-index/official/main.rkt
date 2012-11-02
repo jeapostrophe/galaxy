@@ -102,72 +102,13 @@
      pkg-url-str]))
 
 (define (page/info req pkg-name)
-  (define i (package-info pkg-name))
-  (define author (package-ref i 'author))
-  (define (add-tag req)
-    (define new-tag
-      (formlet-process add-tag-formlet req))
-    (when (regexp-match #rx"[^a-zA-Z0-9]" new-tag)
-      (error 'galaxy "Illegal character in tag; only alphanumerics allowed: ~e" new-tag))
-    (package-info-set!
-     pkg-name
-     (hash-update i 'tags
-                  (λ (old)
-                    (sort (cons new-tag
-                                old)
-                          string-ci<?))
-                  empty))
-    (redirect-to (main-url page/info pkg-name)))
-  (define add-tag-formlet
-    (formlet
-     ,{(to-string (required (text-input))) . => . tag}
-     tag))
-  (send/suspend/dispatch
-   (λ (embed/url)
-     (template
-      req
-      #:breadcrumb
-      (list (cons "Packages" (main-url page/main))
-            pkg-name)
-      `(div ([class "package"])
-            (table
-             (tr
-              (td "Name")
-              (td ,pkg-name))
-             (tr
-              (td "Author")
-              (td (a ([href ,(main-url page/search
-                                       (list (format "author:~a" author)))])
-                     ,author)))
-             (tr
-              (td "Source")
-              (td (a ([href ,(package-url->useful-url (package-ref i 'source))])
-                     ,(package-ref i 'source))))
-             (tr
-              (td "Checksum")
-              (td ,(package-ref i 'checksum)))
-             (tr
-              (td "Last Update")
-              (td ,(format-time (package-ref i 'last-updated))))
-             (tr
-              (td "Last Checked")
-              (td ,(format-time (package-ref i 'last-checked))))
-             (tr
-              (td "Description")
-              (td ,(package-ref i 'description)))
-             (tr
-              (td "Last Edit")
-              (td ,(format-time (package-ref i 'last-edit))))
-             (tr
-              (td "Tags")
-              (td
-               (ul
-                ,@(for/list ([t (in-list (package-ref i 'tags))])
-                    `(li (a ([href ,(main-url page/search (list t))])
-                            ,t)))
-                (li (form ([action ,(embed/url add-tag)])
-                          ,@(formlet-display add-tag-formlet)
-                          (input ([type "submit"] [value "Add Tag"])))))))))))))
+  (page/info-like
+   (list (cons "Packages" (main-url page/main))
+         pkg-name)
+   #f
+   (λ (embed/url t)
+     (main-url page/search (list t)))
+   req pkg-name))
 
 (define (search-term-eval pkg-name info term)
   (match term
@@ -410,86 +351,188 @@
 (define (page/manage/upload req)
   (page/manage/edit req #f))
 
+(define (request-binding/string req id [fail? #t])
+  (define res
+    (bindings-assq (string->bytes/utf-8 id)
+                   (request-bindings/raw req)))
+  (cond
+    [res
+     (bytes->string/utf-8
+      (binding:form-value
+       res))]
+    [fail?
+     (error 'galaxy "Missing field ~e" id)]
+    [else
+     #f]))
+
 (define (page/manage/edit req pkg)
-  (define-values
-    (pkg-name-bs pkg-source-bs pkg-desc-bs)
-    (match pkg
-      [#f
-       (values #"" #"" #"")]
-      [_
-       (define i (package-info pkg))
-       (apply values
-              (map string->bytes/utf-8
-                   (list pkg
-                         (package-ref i 'source)
-                         (package-ref i 'description))))]))
+  (define (edit-details pkg-req)
+    (define new-pkg (request-binding/string pkg-req "name"))
+    (define new-source (request-binding/string pkg-req "source"))
+    (define new-desc (request-binding/string pkg-req "description"))
 
-  ;; XXX let the owner delete tags
-  (define pkg-formlet
-    (formlet
-     (table
-      (tr (td "Name")
-          (td  ,{(to-string (required (text-input #:value pkg-name-bs))) . => . package}))
-      (tr (td "Source")
-          (td ,{(to-string (required (text-input #:value pkg-source-bs))) . => . source}
-              " (" (a ([href "XXX"]) "details") ")"))
-      (tr (td "Description")
-          (td ,{(to-string (required (textarea-input #:value pkg-desc-bs))) . => . desc}))
-      (tr (td ([class "submit"] [colspan "2"])
-              (input ([type "submit"] [value "Submit"])))))
-     (values package source desc)))
-  (define pkg-req
-    (send/suspend
-     (λ (k-url)
-       (template
-        req
-        #:breadcrumb
-        (list* (cons "Packages" (main-url page/main))
-               (current-user req #t)
-               (cons "Manage" (main-url page/manage))
-               (if pkg
-                 (list pkg
-                       "Edit")
-                 (list "Upload")))
-        `(div ([class "package"])
-              (form ([action ,k-url] [method "post"])
-                    ,@(formlet-display pkg-formlet)))))))
-  (define-values
-    (new-pkg new-source new-desc)
-    (formlet-process pkg-formlet pkg-req))
+    ;; XXX validate name
+    ;; XXX make sure we are not deleting a package current-user didn't make
 
-  ;; XXX make sure we are not deleting a package current-user didn't make
+    (package-begin
+     (define* i
+       (if pkg
+         (package-info pkg)
+         (hasheq)))
 
-  (package-begin
-   (define* i
-     (if pkg
-       (package-info pkg)
-       (hasheq)))
+     (define* i
+       (hash-set i 'name new-pkg))
+     (define* i
+       (hash-set i 'source new-source))
+     (define* i
+       (hash-set i 'author (current-user req #t)))
+     (define* i
+       (hash-set i 'description new-desc))
+     (define* i
+       (hash-set i 'last-edit (current-seconds)))
+     (define* i
+       (if pkg
+         i
+         (hash-set i 'checksum "")))
 
-   (define* i
-     (hash-set i 'name new-pkg))
-   (define* i
-     (hash-set i 'source new-source))
-   (define* i
-     (hash-set i 'author (current-user req #t)))
-   (define* i
-     (hash-set i 'description new-desc))
-   (define* i
-     (hash-set i 'last-edit (current-seconds)))
-   (define* i
-     (if pkg
-       i
-       (hash-set i 'checksum "")))
+     (package-info-set! new-pkg i))
 
-   (package-info-set! new-pkg i))
+    (unless (or (not pkg) (equal? new-pkg pkg))
+      (package-remove! pkg))
 
-  (unless (or (not pkg) (equal? new-pkg pkg))
-    (package-remove! pkg))
+    (update-checksum new-pkg)
 
-  (update-checksum new-pkg)
+    (define new-tag
+      (request-binding/string pkg-req "tag" #f))
+    (add-tag! new-pkg new-tag)
 
+    (redirect-to
+     (main-url page/manage/edit new-pkg)))
+
+  (page/info-like
+   (list* (cons "Packages" (main-url page/main))
+          (current-user req #t)
+          (cons "Manage" (main-url page/manage))
+          (if pkg
+            (list pkg
+                  "Edit")
+            (list "Upload")))
+   edit-details
+   (λ (embed/url t)
+     (embed/url (remove-tag-handler pkg t)))
+   req pkg))
+
+
+(define (tags-normalize ts)
+  (remove-duplicates (sort ts string-ci<?)))
+
+(define ((remove-tag-handler pkg t) req)
+  (define i (package-info pkg))
+  (package-info-set!
+   pkg
+   (hash-update i 'tags
+                (λ (old)
+                  (tags-normalize
+                   (remove t
+                           old)))
+                empty))
   (redirect-to
-   (main-url page/manage/edit new-pkg)))
+   (main-url page/manage/edit pkg)))
+
+(define ((add-tag-handler pkg-name) req)
+  (define new-tag
+    (request-binding/string req "tag" #f))
+  (add-tag! pkg-name new-tag)
+  (redirect-to (main-url page/info pkg-name)))
+
+(define (add-tag! pkg-name new-tag)
+  (when (and new-tag
+             (not (string=? new-tag "")))
+    (define i (package-info pkg-name))
+    (when (regexp-match #rx"[^a-zA-Z0-9]" new-tag)
+      (error 'galaxy
+             "Illegal character in tag; only alphanumerics allowed: ~e"
+             new-tag))
+    (package-info-set!
+     pkg-name
+     (hash-update i 'tags
+                  (λ (old)
+                    (tags-normalize
+                     (cons new-tag
+                           old)))
+                  empty))))
+
+(define (page/info-like bc edit-details tag-url req pkg-name)
+  (define form-handler
+    (or edit-details
+        (add-tag-handler pkg-name)))
+
+  (send/suspend/dispatch
+   (λ (embed/url)
+     (define i (package-info pkg-name))
+     (define author (package-ref i 'author))
+     (define the-table
+       `(table
+         (tr
+          (td "Name")
+          (td ,(if edit-details
+                 `(input ([name "name"]
+                          [type "text"]
+                          [value ,pkg-name]))
+                 pkg-name)))
+         (tr
+          (td "Author")
+          (td (a ([href ,(main-url page/search
+                                   (list (format "author:~a" author)))])
+                 ,author)))
+         (tr
+          (td "Source")
+          (td
+           ,(if edit-details
+              `(span (input ([name "source"]
+                             [type "text"]
+                             [value ,(package-ref i 'source)]))
+                     " (" (a ([href "XXX"]) "details") ")")
+              `(a ([href ,(package-url->useful-url (package-ref i 'source))])
+                  ,(package-ref i 'source)))))
+         (tr
+          (td "Checksum")
+          (td ,(package-ref i 'checksum)))
+         (tr
+          (td "Last Update")
+          (td ,(format-time (package-ref i 'last-updated))))
+         (tr
+          (td "Last Checked")
+          (td ,(format-time (package-ref i 'last-checked))))
+         (tr
+          (td "Description")
+          (td ,(if edit-details
+                 `(textarea ([name "description"])
+                            ,(package-ref i 'description))
+                 (package-ref i 'description))))
+         (tr
+          (td "Last Edit")
+          (td ,(format-time (package-ref i 'last-edit))))
+         (tr
+          (td "Tags")
+          (td
+           (ul
+            ,@(for/list ([t (in-list (package-ref i 'tags))])
+                `(li (a ([href ,(tag-url embed/url t)])
+                        ,t)))
+            ,(if pkg-name
+               `(li (input ([name "tag"] [type "text"])))
+               ""))))
+         `(tr (td ([class "submit"] [colspan "2"])
+                  (input ([type "submit"] [value "Submit"]))))))
+     (template
+      req
+      #:breadcrumb
+      bc
+      `(div
+        ([class "package"])
+        (form ([action ,(embed/url form-handler)] [method "post"])
+              ,the-table))))))
 
 (define (page/manage/update req)
   (update-checksums
