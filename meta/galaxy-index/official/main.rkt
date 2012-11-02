@@ -424,7 +424,6 @@
                          (package-ref i 'source)
                          (package-ref i 'description))))]))
 
-  ;; XXX mention valid source format
   ;; XXX let the owner delete tags
   (define pkg-formlet
     (formlet
@@ -432,7 +431,8 @@
       (tr (td "Name")
           (td  ,{(to-string (required (text-input #:value pkg-name-bs))) . => . package}))
       (tr (td "Source")
-          (td ,{(to-string (required (text-input #:value pkg-source-bs))) . => . source}))
+          (td ,{(to-string (required (text-input #:value pkg-source-bs))) . => . source}
+              " (" (a ([href "XXX"]) "details") ")"))
       (tr (td "Description")
           (td ,{(to-string (required (textarea-input #:value pkg-desc-bs))) . => . desc}))
       (tr (td ([class "submit"] [colspan "2"])

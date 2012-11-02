@@ -84,6 +84,9 @@ table.packages tbody tr:nth-child(2n) {
     margin-right: 15%;
     border: 1px dotted;
 }
+.package table td {
+    vertical-align: top;
+}
 .package table td:nth-child(1) {
     text-align: right;
 }
