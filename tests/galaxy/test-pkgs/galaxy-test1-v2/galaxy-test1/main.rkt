@@ -1,4 +1,4 @@
 #lang racket/base
 
-(printf "galaxy-test1/main loaded\n")
+(printf "planet2-test1/main loaded\n")
 (exit 0)

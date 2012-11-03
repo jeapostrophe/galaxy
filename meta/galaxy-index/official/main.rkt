@@ -5,7 +5,7 @@
          racket/function
          racket/runtime-path
          web-server/dispatch
-         galaxy/util
+         planet2/util
          racket/match
          racket/package
          racket/system
@@ -16,7 +16,7 @@
          racket/bool
          racket/list
          net/sendmail
-         meta/galaxy-index/basic/main
+         meta/planet2-index/basic/main
          web-server/http/id-cookie
          file/sha1)
 
@@ -76,7 +76,7 @@
             (λ ()
               (match key
                 [(or 'author 'checksum 'source)
-                 (error 'galaxy "Package ~e is missing a required field: ~e"
+                 (error 'planet2 "Package ~e is missing a required field: ~e"
                         (hash-ref pkg-info 'name) key)]
                 ['tags
                  empty]
@@ -275,7 +275,7 @@
       log-req
       #:breadcrumb
       (list "Login" "Account Registration Error")
-      `(p "Email addresses may not contain / on Galaxy:"
+      `(p "Email addresses may not contain / on Planet2:"
           (tt ,email)))))
 
   (define password-path (build-path users-path email))
@@ -285,11 +285,11 @@
      (send/suspend
       (λ (k-url)
         (send-mail-message
-         "galaxy@racket-lang.org"
-         "Account confirmation for Racket Galaxy"
+         "planet2@racket-lang.org"
+         "Account confirmation for Planet2"
          (list email)
          empty empty
-         (list "Someone tried to register your email address for an account on Racket Galaxy. If you want to authorize this registration and log in, please click the following link:"
+         (list "Someone tried to register your email address for an account on Planet2. If you want to authorize this registration and log in, please click the following link:"
                ""
                (format "https://plt-etc.byu.edu:9004~a" k-url)
                ""
@@ -382,7 +382,7 @@
       (binding:form-value
        res))]
     [fail?
-     (error 'galaxy "Missing field ~e" id)]
+     (error 'planet2 "Missing field ~e" id)]
     [else
      #f]))
 
@@ -390,21 +390,21 @@
   (define (edit-details pkg-req)
     (define new-pkg (request-binding/string pkg-req "name"))
     (when (string=? new-pkg "")
-      (error 'galaxy "Name must not be empty: ~e" new-pkg))
+      (error 'planet2 "Name must not be empty: ~e" new-pkg))
     (define new-source (request-binding/string pkg-req "source"))
     (when (string=? new-source "")
-      (error 'galaxy "Source must not be empty: ~e" new-source))
+      (error 'planet2 "Source must not be empty: ~e" new-source))
     (define new-desc (request-binding/string pkg-req "description"))
 
     (when (regexp-match #rx"[^a-zA-Z0-9_\\-]" new-pkg)
-      (error 'galaxy
+      (error 'planet2
              "Illegal character in name; only alphanumerics, plus '-' and '_' allowed: ~e"
              new-pkg))
 
     (when (and (package-exists? new-pkg)
                (not (equal? (package-ref (package-info new-pkg) 'author)
                             (current-user pkg-req #t))))
-      (error 'galaxy
+      (error 'planet2
              "Packages may only be modified by their authors: ~e"
              new-pkg))
 
@@ -484,7 +484,7 @@
              (not (string=? new-tag "")))
     (define i (package-info pkg-name))
     (when (regexp-match #rx"[^a-zA-Z0-9]" new-tag)
-      (error 'galaxy
+      (error 'planet2
              "Illegal character in tag; only alphanumerics allowed: ~e"
              new-tag))
     (package-info-set!
@@ -529,7 +529,7 @@
                                (pre
                                 ,(format "~a\n~a\n~a\n"
                                          "#lang racket"
-                                         "(require galaxy)"
+                                         "(require planet2)"
                                          (format "(install \"~a\")"
                                                  pkg-name)))))))))
          (tr
@@ -616,7 +616,7 @@
    (package-info-set! pkg-name i)))
 
 (define basic-start
-  (galaxy-index/basic package-list package-info))
+  (planet2-index/basic package-list package-info))
 
 (define (go port)
   (printf "launching on port ~a\n" port)

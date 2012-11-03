@@ -9,7 +9,7 @@
          racket/runtime-path
          racket/path
          racket/list
-         galaxy/util
+         planet2/util
          "shelly.rkt"
          "util.rkt")
 
@@ -23,50 +23,50 @@
                 $ "raco pkg show" =stdout> "Package(auto?)    Checksum    Source\n"
                 $ "raco pkg remove not-there" =exit> 1)
    (shelly-install "remove test"
-                   "test-pkgs/galaxy-test1.zip")
+                   "test-pkgs/planet2-test1.zip")
    (shelly-install "remove of dep fails"
-                   "test-pkgs/galaxy-test1.zip"
-                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\n"
-                   $ "raco pkg install test-pkgs/galaxy-test2.zip"
-                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\ngalaxy-test2      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip\\)\n"
-                   $ "raco pkg remove galaxy-test1" =exit> 1
-                   $ "raco pkg remove galaxy-test2"
-                   $ "raco pkg show" =stdout>  #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test1.zip\\)\n")
+                   "test-pkgs/planet2-test1.zip"
+                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\nplanet2-test1      [a-f0-9]+    \\(file .+tests/planet2/test-pkgs/planet2-test1.zip\\)\n"
+                   $ "raco pkg install test-pkgs/planet2-test2.zip"
+                   $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\nplanet2-test1      [a-f0-9]+    \\(file .+tests/planet2/test-pkgs/planet2-test1.zip\\)\nplanet2-test2      [a-f0-9]+    \\(file .+tests/planet2/test-pkgs/planet2-test2.zip\\)\n"
+                   $ "raco pkg remove planet2-test1" =exit> 1
+                   $ "raco pkg remove planet2-test2"
+                   $ "raco pkg show" =stdout>  #rx"Package\\(auto\\?\\)    Checksum                                    Source\nplanet2-test1      [a-f0-9]+    \\(file .+tests/planet2/test-pkgs/planet2-test1.zip\\)\n")
    (shelly-install "remove of dep can be forced"
-                   "test-pkgs/galaxy-test1.zip"
-                   $ "raco pkg install test-pkgs/galaxy-test2.zip"
-                   $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
-                   $ "raco pkg remove --force galaxy-test1"
-                   $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 1
-                   $ "raco pkg install test-pkgs/galaxy-test1.zip"
-                   $ "raco pkg remove galaxy-test2")
+                   "test-pkgs/planet2-test1.zip"
+                   $ "raco pkg install test-pkgs/planet2-test2.zip"
+                   $ "racket -e '(require planet2-test2/contains-dep)'" =exit> 0
+                   $ "raco pkg remove --force planet2-test1"
+                   $ "racket -e '(require planet2-test2/contains-dep)'" =exit> 1
+                   $ "raco pkg install test-pkgs/planet2-test1.zip"
+                   $ "raco pkg remove planet2-test2")
    (with-fake-root
     (shelly-case
      "remove two"
-     $ "racket -e '(require galaxy-test1)'" =exit> 1
-     $ "racket -e '(require galaxy-test2)'" =exit> 1
-     $ "raco pkg install test-pkgs/galaxy-test2.zip test-pkgs/galaxy-test1.zip" =exit> 0
-     $ "racket -e '(require galaxy-test1)'" =exit> 0
-     $ "racket -e '(require galaxy-test2)'" =exit> 0
-     $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
-     $ "raco pkg remove galaxy-test1 galaxy-test2"
-     $ "racket -e '(require galaxy-test1)'" =exit> 1
-     $ "racket -e '(require galaxy-test2)'" =exit> 1))
+     $ "racket -e '(require planet2-test1)'" =exit> 1
+     $ "racket -e '(require planet2-test2)'" =exit> 1
+     $ "raco pkg install test-pkgs/planet2-test2.zip test-pkgs/planet2-test1.zip" =exit> 0
+     $ "racket -e '(require planet2-test1)'" =exit> 0
+     $ "racket -e '(require planet2-test2)'" =exit> 0
+     $ "racket -e '(require planet2-test2/contains-dep)'" =exit> 0
+     $ "raco pkg remove planet2-test1 planet2-test2"
+     $ "racket -e '(require planet2-test1)'" =exit> 1
+     $ "racket -e '(require planet2-test2)'" =exit> 1))
    (with-fake-root
     (shelly-case
      "autoremove"
      $ "raco pkg config --set indexes http://localhost:9990"
-     $ "racket -e '(require galaxy-test1)'" =exit> 1
-     $ "racket -e '(require galaxy-test2)'" =exit> 1
-     $ "raco pkg install --deps search-auto test-pkgs/galaxy-test2.zip" =exit> 0
-     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1\\*     [a-f0-9]+    \\(pns galaxy-test1\\)\ngalaxy-test2      [a-f0-9]+    \\(file /home/jay/Dev/scm/github.jeapostrophe/galaxy/tests/galaxy/test-pkgs/galaxy-test2.zip\\)\n"
-     $ "racket -e '(require galaxy-test1)'" =exit> 0
-     $ "racket -e '(require galaxy-test2)'" =exit> 0
-     $ "racket -e '(require galaxy-test2/contains-dep)'" =exit> 0
-     $ "raco pkg remove galaxy-test2"
-     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\ngalaxy-test1\\*     [a-f0-9]+    \\(pns galaxy-test1\\)\n"
-     $ "racket -e '(require galaxy-test1)'" =exit> 0
+     $ "racket -e '(require planet2-test1)'" =exit> 1
+     $ "racket -e '(require planet2-test2)'" =exit> 1
+     $ "raco pkg install --deps search-auto test-pkgs/planet2-test2.zip" =exit> 0
+     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\nplanet2-test1\\*     [a-f0-9]+    \\(pns planet2-test1\\)\nplanet2-test2      [a-f0-9]+    \\(file .+tests/planet2/test-pkgs/planet2-test2.zip\\)\n"
+     $ "racket -e '(require planet2-test1)'" =exit> 0
+     $ "racket -e '(require planet2-test2)'" =exit> 0
+     $ "racket -e '(require planet2-test2/contains-dep)'" =exit> 0
+     $ "raco pkg remove planet2-test2"
+     $ "raco pkg show" =stdout> #rx"Package\\(auto\\?\\)    Checksum                                    Source\nplanet2-test1\\*     [a-f0-9]+    \\(pns planet2-test1\\)\n"
+     $ "racket -e '(require planet2-test1)'" =exit> 0
      $ "raco pkg remove --auto"
      $ "raco pkg show" =stdout> "Package(auto?)    Checksum    Source\n"
-     $ "racket -e '(require galaxy-test1)'" =exit> 1
-     $ "racket -e '(require galaxy-test2)'" =exit> 1)))))
+     $ "racket -e '(require planet2-test1)'" =exit> 1
+     $ "racket -e '(require planet2-test2)'" =exit> 1)))))

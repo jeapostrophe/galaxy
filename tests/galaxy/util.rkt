@@ -9,7 +9,7 @@
          racket/runtime-path
          racket/path
          racket/list
-         galaxy/util
+         planet2/util
          "shelly.rkt")
 
 (define-runtime-path test-directory ".")
@@ -33,8 +33,8 @@
   (dynamic-wind
       void
       (λ ()
-        ;; {{ This part is because I am developing galaxy in a
-        ;; collection root link, but would be unnecessary once galaxy
+        ;; {{ This part is because I am developing planet2 in a
+        ;; collection root link, but would be unnecessary once planet2
         ;; is in the core
 
         ;; (copy-file (find-system-path 'links-file)
@@ -76,11 +76,11 @@
                  #:port 9999
                  #:extra-files-paths (list (build-path test-directory "test-pkgs"))))
 
-(require meta/galaxy-index/basic/main)
+(require meta/planet2-index/basic/main)
 (define *index-ht-1* (make-hash))
 (define *index-ht-2* (make-hash))
-(define (start-galaxy-server index-ht port)
-  (serve/servlet (galaxy-index/basic
+(define (start-planet2-server index-ht port)
+  (serve/servlet (planet2-index/basic
                   (λ ()
                     (hash-keys index-ht))
                   (λ (pkg-name)
@@ -99,10 +99,10 @@
     [else
      (set! servers-on? #t)
      (with-thread
-      (λ () (start-galaxy-server *index-ht-1* 9990))
+      (λ () (start-planet2-server *index-ht-1* 9990))
       (λ ()
         (with-thread
-         (λ () (start-galaxy-server *index-ht-2* 9991))
+         (λ () (start-planet2-server *index-ht-2* 9991))
          (λ ()
            (with-thread (λ () (start-file-server))
                         t)))))]))
@@ -134,35 +134,35 @@
    (shelly-case
     (format "Test installation of ~a" message)
     pre ...
-    $ "racket -e '(require galaxy-test1)'" =exit> 1
+    $ "racket -e '(require planet2-test1)'" =exit> 1
     $ (format "raco pkg install ~a" pkg)
-    $ "racket -e '(require galaxy-test1)'"
+    $ "racket -e '(require planet2-test1)'"
     more ...
     $ (format "raco pkg remove ~a" rm-pkg)
-    $ "racket -e '(require galaxy-test1)'" =exit> 1)))
+    $ "racket -e '(require planet2-test1)'" =exit> 1)))
 
 (define-syntax-rule (shelly-install* message pkg rm-pkg more ...)
   (shelly-install** message pkg rm-pkg () (more ...)))
 
 (define-syntax-rule (shelly-install message pkg more ...)
-  (shelly-install* message pkg "galaxy-test1" more ...))
+  (shelly-install* message pkg "planet2-test1" more ...))
 
 (define (initialize-indexes)
-  (hash-set! *index-ht-1* "galaxy-test1"
+  (hash-set! *index-ht-1* "planet2-test1"
              (hasheq 'checksum
-                     (file->string "test-pkgs/galaxy-test1.zip.CHECKSUM")
+                     (file->string "test-pkgs/planet2-test1.zip.CHECKSUM")
                      'source
-                     "http://localhost:9999/galaxy-test1.zip"))
+                     "http://localhost:9999/planet2-test1.zip"))
 
-  (hash-set! *index-ht-1* "galaxy-test2"
+  (hash-set! *index-ht-1* "planet2-test2"
              (hasheq 'checksum
-                     (file->string "test-pkgs/galaxy-test2.zip.CHECKSUM")
+                     (file->string "test-pkgs/planet2-test2.zip.CHECKSUM")
                      'source
-                     "http://localhost:9999/galaxy-test2.zip"))
-  (hash-set! *index-ht-2* "galaxy-test2-snd"
+                     "http://localhost:9999/planet2-test2.zip"))
+  (hash-set! *index-ht-2* "planet2-test2-snd"
              (hasheq 'checksum
-                     (file->string "test-pkgs/galaxy-test2.zip.CHECKSUM")
+                     (file->string "test-pkgs/planet2-test2.zip.CHECKSUM")
                      'source
-                     "http://localhost:9999/galaxy-test2.zip")))
+                     "http://localhost:9999/planet2-test2.zip")))
 
 (provide (all-defined-out))

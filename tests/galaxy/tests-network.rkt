@@ -9,13 +9,13 @@
          racket/runtime-path
          racket/path
          racket/list
-         galaxy/util
+         planet2/util
          "shelly.rkt"
          "util.rkt")
 
 (pkg-tests
  (shelly-begin
   (shelly-install "remote/github"
-                  "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1")
+                  "github://github.com/jeapostrophe/galaxy/master/tests/planet2/test-pkgs/planet2-test1")
   (shelly-install "remote/github with slash"
-                  "github://github.com/jeapostrophe/galaxy/master/tests/galaxy/test-pkgs/galaxy-test1/")))
+                  "github://github.com/jeapostrophe/galaxy/master/tests/planet2/test-pkgs/planet2-test1/")))

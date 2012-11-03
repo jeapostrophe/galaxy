@@ -99,7 +99,7 @@
   (call-with-file-lock/timeout
    #f 'exclusive
    t
-   (λ () (error 'galaxy "Could not acquire package lock: ~e"
+   (λ () (error 'planet2 "Could not acquire package lock: ~e"
                 (pkg-lock-file)))
    #:lock-file (pkg-lock-file)))
 (define-syntax-rule (with-package-lock e ...)
@@ -122,7 +122,7 @@
        (string->url i)
        (format "/pkg/~a" pkg))
       read))
-   (error 'galaxy "Cannot find package ~a on indexes" pkg)))
+   (error 'planet2 "Cannot find package ~a on indexes" pkg)))
 
 (define (remote-package-checksum pkg)
   (match pkg
@@ -154,7 +154,7 @@
     [(not fail?)
      #f]
     [else
-     (error 'galaxy "Package ~e not currently installed; ~e are installed"
+     (error 'planet2 "Package ~e not currently installed; ~e are installed"
             pkg-name
             (hash-keys db))]))
 
@@ -245,7 +245,7 @@
                     (set->list
                      remaining-pkg-db-set)))))
     (unless (set-empty? deps-to-be-removed)
-      (error 'galaxy "Cannot remove packages that are dependencies of other packages: ~e"
+      (error 'planet2 "Cannot remove packages that are dependencies of other packages: ~e"
              (set->list deps-to-be-removed))))
   (for-each remove-package pkgs))
 
@@ -452,13 +452,13 @@
          (when (and check-sums?
                     (install-info-checksum info)
                     (not checksum))
-           (error 'galaxy "Remote package ~a had no checksum"
+           (error 'planet2 "Remote package ~a had no checksum"
                   pkg))
          (when (and checksum
                     (install-info-checksum info)
                     check-sums?
                     (not (equal? (install-info-checksum info) checksum)))
-           (error 'galaxy "Incorrect checksum on package ~e: expected ~e, got ~e"
+           (error 'planet2 "Incorrect checksum on package ~e: expected ~e, got ~e"
                   pkg
                   (install-info-checksum info) checksum))
          (update-install-info-checksum
@@ -473,7 +473,7 @@
        (when (and (install-info-checksum info)
                   check-sums?
                   (not (equal? (install-info-checksum info) checksum)))
-         (error 'galaxy "Incorrect checksum on package: ~e" pkg))
+         (error 'planet2 "Incorrect checksum on package: ~e" pkg))
        (update-install-info-orig-pkg
         (update-install-info-checksum
          info
@@ -495,7 +495,7 @@
     (cond
       [(and (not updating?) (package-info pkg-name #f))
        (clean!)
-       (error 'galaxy "~e is already installed" pkg-name)]
+       (error 'planet2 "~e is already installed" pkg-name)]
       [(and
         (not force?)
         (for/or ([f (in-list (directory-list* pkg-dir))]
@@ -521,7 +521,7 @@
        (λ (conflicting-pkg*file)
          (clean!)
          (match-define (cons conflicting-pkg file) conflicting-pkg*file)
-         (error 'galaxy "~e conflicts with ~e: ~e" pkg conflicting-pkg file))]
+         (error 'planet2 "~e conflicts with ~e: ~e" pkg conflicting-pkg file))]
       [(and
         (not (eq? dep-behavior 'force))
         (let ()
@@ -543,7 +543,7 @@
                    'fail))
            ['fail
             (clean!)
-            (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+            (error 'planet2 "missing dependencies: ~e" unsatisfied-deps)]
            ['search-auto
             (printf "The following packages are listed as dependencies, but are not currently installed, so we will automatically install them.\n")
             (printf "\t")
@@ -565,7 +565,7 @@
                  (raise (vector infos unsatisfied-deps))]
                 [(or "n" "N")
                  (clean!)
-                 (error 'galaxy "missing dependencies: ~e" unsatisfied-deps)]
+                 (error 'planet2 "missing dependencies: ~e" unsatisfied-deps)]
                 [x
                  (eprintf "Invalid input: ~e\n" x)
                  (loop)]))]))]
@@ -645,14 +645,14 @@
                 (package-info pkg-name))
   (match orig-pkg
     [`(link ,_)
-     (error 'galaxy "Cannot update linked packages (~e is linked to ~e)"
+     (error 'planet2 "Cannot update linked packages (~e is linked to ~e)"
             pkg-name
             orig-pkg)]
     [`(dir ,_)
-     (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local directory.)"
+     (error 'planet2 "Cannot update packages installed locally. (~e was installed via a local directory.)"
             pkg-name)]
     [`(file ,_)
-     (error 'galaxy "Cannot update packages installed locally. (~e was installed via a local file.)"
+     (error 'planet2 "Cannot update packages installed locally. (~e was installed via a local file.)"
             pkg-name)]
     [`(,_ ,orig-pkg-desc)
      (define new-checksum
@@ -714,9 +714,9 @@
        [(list* (and key "indexes") val)
         (update-pkg-cfg! "indexes" val)]
        [(list key)
-        (error 'galaxy "unsupported config key: ~e" key)]
+        (error 'planet2 "unsupported config key: ~e" key)]
        [(list)
-        (error 'galaxy "must provide config key")])]
+        (error 'planet2 "must provide config key")])]
     [else
      (match key+vals
        [(list key)
@@ -725,17 +725,17 @@
            (for ([s (in-list (read-pkg-cfg/def "indexes"))])
              (printf "~a\n" s))]
           [_
-           (error 'galaxy "unsupported config key: ~e" key)])]
+           (error 'planet2 "unsupported config key: ~e" key)])]
        [(list)
-        (error 'galaxy "must provide config key")]
+        (error 'planet2 "must provide config key")]
        [_
-        (error 'galaxy "must provide only config key")])]))
+        (error 'planet2 "must provide only config key")])]))
 
 (define (create-cmd create:format maybe-dir)
   (begin
     (define dir (regexp-replace* #rx"/$" maybe-dir ""))
     (unless (directory-exists? dir)
-      (error 'galaxy "directory does not exist: ~e" dir))
+      (error 'planet2 "directory does not exist: ~e" dir))
     (match create:format
       ["MANIFEST"
        (with-output-to-file
@@ -757,13 +757,13 @@
          ["tgz"
           (unless (system* (find-executable-path "tar") "-cvzf" pkg "-C" dir ".")
             (delete-file pkg)
-            (error 'galaxy "Package creation failed"))]
+            (error 'planet2 "Package creation failed"))]
          ["zip"
           (define orig-pkg (normalize-path pkg))
           (parameterize ([current-directory dir])
             (unless (system* (find-executable-path "zip") "-r" orig-pkg ".")
               (delete-file pkg)
-              (error 'galaxy "Package creation failed")))]
+              (error 'planet2 "Package creation failed")))]
          ["plt"
           (pack-plt pkg pkg-name (list dir)
                     #:as-paths (list "."))]

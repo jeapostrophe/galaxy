@@ -1,1 +1,1 @@
-((dependency "galaxy-test1"))
+((dependency "planet2-test1"))

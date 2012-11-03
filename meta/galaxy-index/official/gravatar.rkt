@@ -6,7 +6,7 @@
          racket/port
          net/url
          file/md5
-         galaxy/util)
+         planet2/util)
 
 (define (gravatar-hash email)
   (bytes->string/utf-8

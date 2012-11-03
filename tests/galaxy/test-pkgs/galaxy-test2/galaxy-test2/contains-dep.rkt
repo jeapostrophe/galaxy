@@ -1,3 +1,3 @@
 #lang racket
-(require galaxy-test1)
+(require planet2-test1)
 (exit 0)

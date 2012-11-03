@@ -3,7 +3,7 @@
          racket/file
          web-server/http
          web-server/servlet-env
-         meta/galaxy-index/basic/main
+         meta/planet2-index/basic/main
          racket/port
          racket/match
          racket/runtime-path
@@ -266,7 +266,7 @@
           (unless (directory-exists? dest-dir)
             (printf "Unpacking ~a\n" pkg-short)
             (make-directory dest-dir)
-            (local-require galaxy/util-plt)
+            (local-require planet2/util-plt)
             (unplt dest dest-dir))
 
           (define pkg/no-plt
@@ -360,7 +360,7 @@
 (define (go port)
   (printf "Launching server on port ~a\n" port)
   (serve/servlet
-   (galaxy-index/basic
+   (planet2-index/basic
     (λ () pkg-list)
     (λ (pkg-name)
       (and

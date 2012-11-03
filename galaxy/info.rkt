@@ -1,7 +1,7 @@
 #lang setup/infotab
 
-(define name "Galaxy")
+(define name "Planet2")
 (define scribblings 
-  '(("scribblings/galaxy.scrbl" (multi-page) (tool))))
+  '(("scribblings/planet2.scrbl" (multi-page) (tool))))
 (define raco-commands
-  '(("pkg" galaxy/raco "manage packages" 81)))
+  '(("pkg" planet2/raco "manage packages" 81)))

@@ -9,7 +9,7 @@
             #"text/s-expr" empty
             (λ (op) (write v op))))
 
-(define (galaxy-index/basic get-pkgs pkg-name->info)
+(define (planet2-index/basic get-pkgs pkg-name->info)
   (define (write-info req pkg-name)
     (response/sexpr (pkg-name->info pkg-name)))
   (define (display-info req pkg-name)
@@ -38,7 +38,7 @@
   dispatch)
 
 (provide/contract
- [galaxy-index/basic
+ [planet2-index/basic
   (-> (-> (listof string?))
       (-> string? (hash/c symbol? any/c))
       (-> request? response?))])

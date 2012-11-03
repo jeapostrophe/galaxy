@@ -1,2 +1,2 @@
 all:
-	rk ../tests/galaxy/test.rkt
+	rk ../tests/planet2/test.rkt

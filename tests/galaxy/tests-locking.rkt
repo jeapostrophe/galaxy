@@ -1,7 +1,7 @@
 #lang racket/base
 (require web-server/http
          web-server/servlet-env
-         meta/galaxy-index/basic/main
+         meta/planet2-index/basic/main
          "shelly.rkt"
          "util.rkt")
 
@@ -15,7 +15,7 @@
    (define okay-to-respond?-sema (make-semaphore))
    (thread
     (λ ()
-      (serve/servlet (galaxy-index/basic
+      (serve/servlet (planet2-index/basic
                       (λ (pkg-name)
                         (semaphore-wait okay-to-respond?-sema)
                         (define r (hash-ref *index-ht-1* pkg-name #f))
@@ -32,11 +32,11 @@
    (thread
     (λ ()
       (shelly-begin
-       $ "raco pkg install galaxy-test1")))
+       $ "raco pkg install planet2-test1")))
    (sleep 1)
 
    ;; Step 4: Start the installation request that will fail
-   $ "raco pkg install galaxy-test1" =exit> 1
+   $ "raco pkg install planet2-test1" =exit> 1
 
    ;; Step 5: Free the other one
    (semaphore-post okay-to-respond?-sema))))

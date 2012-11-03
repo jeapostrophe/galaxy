@@ -9,7 +9,7 @@
          racket/runtime-path
          racket/path
          racket/list
-         galaxy/util
+         planet2/util
          "shelly.rkt"
          "util.rkt")
 
