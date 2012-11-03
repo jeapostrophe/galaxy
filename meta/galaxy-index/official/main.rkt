@@ -17,7 +17,8 @@
          racket/list
          net/sendmail
          meta/galaxy-index/basic/main
-         web-server/http/id-cookie)
+         web-server/http/id-cookie
+         file/sha1)
 
 (define-syntax-rule (while cond e ...)
   (let loop ()
@@ -28,6 +29,9 @@
 (define (snoc l x)
   (append l (list x)))
 
+(define (salty str)
+  (sha1 (open-input-string str)))
+
 (define-runtime-path src ".")
 
 (define-runtime-path root "root")
@@ -37,6 +41,17 @@
    (build-path root "secret.key")))
 (define users-path (build-path root "users"))
 (make-directory* users-path)
+
+(module+ main
+  (define users-old-path (build-path root "users.old"))
+  (when (directory-exists? users-old-path)
+    (for ([u (in-list (directory-list users-old-path))])
+      (define uop (build-path users-old-path u))
+      (display-to-file (salty (file->string uop))
+                       (build-path users-path u))
+      (delete-file uop))
+    (delete-directory users-old-path)))
+
 (define pkgs-path (build-path root "pkgs"))
 (make-directory* pkgs-path)
 
@@ -239,6 +254,7 @@
                     ,@(formlet-display login-formlet)
                     (input ([type "submit"] [value "Log in"])))
               (p "If you enter an unclaimed email address, then an account will be created.")
+              (p "Passwords are stored in the delicious SHA1 format, but transfered as plain-text over the HTTPS connection.")
               ,@(if last-error
                   `((h1 ([class "error"]) ,last-error))
                   '()))))))
@@ -285,9 +301,9 @@
          `(p "An email has been sent to "
              (tt ,email)
              ", please click the link it contains to register and log in."))))
-     (display-to-file passwd password-path)
+     (display-to-file (salty passwd) password-path)
      (authenticated!)]
-    [(not (bytes=? (string->bytes/utf-8 passwd)
+    [(not (bytes=? (string->bytes/utf-8 (salty passwd))
                    (file->bytes password-path)))
      (login req (format "The given password is incorrect for email address ~e"
                         email))]
@@ -517,7 +533,7 @@
                      " (" (a ([href "XXX"]) "details") ")")
               `(a ([href
                     ,(package-url->useful-url (package-ref i 'source))])
-                  ,(package-ref i 'source "")))))
+                  ,(package-ref i 'source)))))
          (tr
           (td "Checksum")
           (td ,(package-ref* i 'checksum "")))
