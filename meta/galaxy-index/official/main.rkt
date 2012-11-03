@@ -517,7 +517,21 @@
                  `(input ([name "name"]
                           [type "text"]
                           [value ,(or pkg-name "")]))
-                 pkg-name)))
+                 `(span ,pkg-name
+                        (br)
+                        (span ([class "tooltip"])
+                              (a ([href "javascript:0;"]) 
+                               "(install instructions)")
+                              (span
+                               "Install this package with:" (br) (br)
+                               (tt "raco pkg install " ,pkg-name) (br) (br)
+                               "or, by evaluating:" (br)
+                               (pre
+                                ,(format "~a\n~a\n~a\n"
+                                         "#lang racket"
+                                         "(require galaxy)"
+                                         (format "(install \"~a\")"
+                                                 pkg-name)))))))))
          (tr
           (td "Author")
           (td (a ([href ,(main-url page/search
