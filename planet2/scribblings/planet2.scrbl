@@ -1,6 +1,6 @@
 #lang scribble/manual
 
-@title{Galaxy: Package Distribution}
+@title{Planet2: Package Distribution}
 @author["Jay McCarthy"]
 
 XXX Write content here

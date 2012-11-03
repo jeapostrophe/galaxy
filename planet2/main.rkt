@@ -6,7 +6,7 @@
 
 (define (setup dont-setup)
   (unless (or dont-setup
-              (equal? "1" (getenv "PLT_GALAXY_DONTSETUP")))
+              (equal? "1" (getenv "PLT_PLANET2_DONTSETUP")))
     (system "raco setup")))
 
 (commands
