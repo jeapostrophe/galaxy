@@ -243,6 +243,10 @@ implementation and its use simple.
    CLOSED: [2012-11-01 Thu 21:53]
 ** DONE Finish the main server (functionality)
    CLOSED: [2012-11-01 Thu 22:12]
+** DONE site - Salty passwords (and mention it)
+   CLOSED: [2012-11-03 Sat 11:15]
+** DONE site - have install instructions next to each package
+   CLOSED: [2012-11-03 Sat 11:33]
 ** TODO Write documentation (convert this document but remove single collect packages)
 ** TODO Create initial packages (my own)
 ** TODO Email current popular package owners to help them convert
