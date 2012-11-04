@@ -235,6 +235,8 @@ out of beta when these are completed.
 
 @itemlist[
 
+@item{It has not been tested on Windows or Mac OS X.}
+
 @item{The official PNS will divide packages into three
 categories: "planet", "solar-system", and "galaxy". The definitions
 for these categories are:
