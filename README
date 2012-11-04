@@ -1,71 +1,4 @@
-* This is the next generation Racket package system to succeed Planet
-** I refer to it as Galaxy, but it will probably be just called Planet 2.0
-* Philosophy
-
-The philosophy of Galaxy is to have many small pieces that do almost
-nothing that can be built on to do more. This is to encourage swapping
-out pieces and making it easy to do, as well as keeping the
-implementation and its use simple.
-
 * Pieces
-** What is a package?
-   A set of collections (although a special case is to install one
-   that is just one collector)
-
-   Any directory or thing that can represent a directory (like a URL
-   directory or an archive) is a package.
-** What do we know about a package, before installation?
-   Name: A string identifying the package
-   Checksum: A SHA1 hash of the entire contents (excluding metadata)
-   Dependencies: A list of package strings it depends on
-   Metadata: An association list of information
-   Manifest: A list of files in it (possibly computed)
-** What about a version number?
-   Packages have no version, besides the checksum. This means that you
-   can determine if an installed package is out-of-date, but nothing
-   else.
-
-   This means that backward incompatible changes should not occur,
-   although this will not be checked.
-
-   Incompatible changes should result in new packages... i.e. libgtk1
-   to libgtk2.
-
-** Where are packages installed?
-   In the addon-dir or the system-addon-dir
-** What do we know about a package, after installation?
-   Name, Checksum, Dependencies, Metadata
-
-   Source: Where the original package contents originated (for update
-   purposes)
-
-   Installed as dependency flag: Records whether the package was
-   installed because it was a dependency or whether the user really
-   wanted it.
-** Conflicts between packages
-   A failure is detected using the manifest and installation fails
-
-   Installation can be forced
-** Where do I get packages?
-   Arbitrary URLs --- to avoid unnecessary work if the URL refers to a
-   file, then it is assumed there is a $.CHECKSUM $.METADATA.rktd file
-   with metadata, including dependencies, the manifest will be
-   computed when it is downloaded. If it is a directory, then
-   $/CHECKSUM and $/METADATA.rktd is assumed to exist, as well as
-   $/MANIFEST listing the files that should be downloaded.
-
-   Git URLs --- assumed to refer to a branch + path in the repo where
-   the checksum is the commit and otherwise treated as a directory
-   URL, modulo not needing a MANIFEST. 
-
-   A package name service --- An HTTP RESTful protocol is used to
-   determine all information.
-** How do I know about a PNS?
-   There is a default one run by PLT. It will have a very simple
-   protocol that anyone could implement easily, and we will provide a
-   basic implementation that someone could deploy locally.
-
-   Each user will have a sorted list of PNSs
 ** How dependencies are dealt with
    A package lists its dependencies by name. If they are not
    installed, there are three options
@@ -129,17 +62,6 @@ implementation and its use simple.
 
    'live - True if the package source URL is accessible
 
-** Security & verification of package contents
-   Since the PNS does not store the contents of packages, the client
-   will verify the checksum given by the PNS versus the checksum of
-   the data provided by the package content source. If there is a
-   mismatch, an attack is assumed to be underway.
-
-   All data from the PNS will be signed with the private part of a
-   key-pair.
-
-   The public key of the official PNS will come with every Racket
-   install.
 ** Updating packages (client)
    When updating a package, the original source is consulted for a new
    checksum that is compared with the checksum of the package that is
@@ -183,13 +105,6 @@ implementation and its use simple.
    Thus, a developer using git can inform the PNS about a package a
    single time and never go back to the site and users will always get
    the most recent versions.
-** Integration with DrDr
-   Packages that the official PNS marks as trusted will be
-   automatically checked by DrDr. If the author is not responsive to
-   conditions found by the DrDr, then trusted status will be revoked.
-** Other trusted notes
-   Trusted code must be documented, tested, and be able to all be
-   installed simultaneously.
 ** Planet compatibility server
    In the beginning, we will run a Planet compatibility server that
    presents all existing Planet packages as if they are Galaxy
@@ -208,24 +123,6 @@ implementation and its use simple.
 
    The automatic translation is likely to break on many packages that
    do exotic or reflective things.
-** Integration with distribution
-   The core distribution will be very small but will ship with a set
-   of default packages that will automatically be installed (or
-   pre-installed in the image.) This set will be decided by PLT and
-   will be be reflected in an OPNS flag.
-** Custom distribution creation
-   We will offer a site where users can assemble their own
-   distributions by checking off boxes for packages. This will produce
-   a URL for a download that includes the core system and a set of
-   packages. We expect people will use this for classes. Any package
-   can be selected in this process.
-** Integration with DrRacket
-   We'll make a GUI for package management. When DrRacket starts it
-   will have a button that is "highlighted" in some way until the user
-   clicks on it at least once which introduces the package system.
-** Other things
-   I'd like to extend the props so there is meta/props.d where
-   packages can install custom props for DrDr
 * Things to do before release
 ** DONE Write the library interface (for DrR usage)
    CLOSED: [2012-10-30 Tue 15:57]
@@ -250,42 +147,8 @@ implementation and its use simple.
 ** DONE Change name from galaxy to p2
    CLOSED: [2012-11-03 Sat 13:16]
 ** TODO Write documentation (convert this document but remove single collect packages)
+** TODO server - disallow plt and racket prefixes
 ** TODO Create initial packages (my own)
 ** TODO Email current popular package owners to help them convert
 ** TODO Email adm about the project
 ** TODO Email dev about the deployment
-* More things to do in the future
-** TODO Implement the trusted idea on the server and have a package search option
-   Have this be versioned (so you can see older fringes) and have
-   them it named by a URL in the code, so you can make your own and
-   use more
-** TODO Create a resolver that searches on server to install a trusted package that provides it
-** TODO system and user package databases are totally separate
-   system -> user conflicts: how to find other users than the
-   installing user?
-
-   user -> system conflicts: how to ensure that the admin doesn't
-   break things in the future?
-
-   This will likely be a sticking point, but I imagine that most users
-   will stick with one... a course will use the system and the
-   students are unlikely to install anything. Most users will stick
-   with their own individual installs, etc.
-
-   The worst case will be its interaction with the distribution of
-   packages on install. I think the solution is to ship with the .plt
-   files and have the install run, so they get put in the right
-   places, rather than having them "pre installed"
-** TODO Trusted packages & DrDr
-   Including zo hosting
-** TODO Have an install package macro for internal linking
-** TODO Track package query statistics
-** TODO Better "social" features on site
-   - Link disqus per package
-   - Link github bug db (or other bug db by URL) per package
-   - Link docs in some way
-** TODO Support straight git, not just github
-** TODO Better user interface (for example, have all dependencies asked about simultaneously.)
-** TODO Make a GUI
-** TODO Implement export
-** TODO Implement export distribution
