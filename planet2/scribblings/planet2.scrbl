@@ -106,28 +106,321 @@ conflict with Racket itself, if it contains a module file that is part
 of the core Racket distribution. For example, any package that
 contains @filepath{racket/list.rkt} is in conflict with Racket.
 
+Package A is a @deftech{package update} of Package B if (1) B is
+installed, (2) A and B have the same name, and (3) A's checksum is
+different than B's.
+
 @section{Using Planet 2}
 
-XXX
+Planet 2 has two user interfaces: a command line @exec{raco}
+sub-command and a library. They have the exact same capabilities, as
+the command line interface invokes the library functions and
+reprovides all their options.
 
 @subsection{Command Line}
 
-XXX
+The @exec{raco pkg} sub-command provides the following
+sub-sub-commands:
+
+@itemlist[
+
+@item{@exec{install pkg ...} -- Installs the list of packages. It accepts the following options:
+
+ @itemlist[
+
+ @item{@DFlag{dont-setup} -- Does not run @exec{raco setup} after installation. This behavior is also the case if the environment variable @envvar{PLT_PLANET2_DONTSETUP} is set to @litchar{1}.}
+
+ @item{@DFlag{installation} -- Install system-wide rather than user-local.}
+
+ @item{@Flag{i} -- Alias for @DFlag{installation}.}
+
+ @item{@DFlag{deps} @exec{dep-behavior} -- Selects the behavior for dependencies. The options are:
+  @itemlist[
+   @item{@exec{fail} -- Cancels the installation if dependencies are unmet (default for most pacakges)}
+   @item{@exec{force} -- Installs the package(s) despite missing dependencies (unsafe)}
+   @item{@exec{search-ask} -- Looks for the dependencies on the configured @tech{package name services} (default if the dependency is an indexed name) but asks if you would like it installed.}
+   @item{@exec{search-auto} --- Like @exec{search-ask}, but does not ask for permission to install.}
+  ]}
+
+  @item{@DFlag{force} -- Ignores conflicts (unsafe.)}
+
+  @item{@DFlag{ignore-checksums} -- Ignores errors verifying package checksums (unsafe.)}
+
+  @item{@DFlag{link} -- When used with a directory package, leave the directory in place, but add a link to it in the package directory. This is a global setting for all installs for this command instance, which means it affects dependencies... so make sure the dependencies exist first.}
+ ]
+}
+
+
+@item{@exec{update pkg ...} -- Checks the list of packages for
+@tech{package updates}. If no packages are given, checks every
+installed package. If an update is found, but it cannot be
+installed (e.g. it is conflicted with another installed package), then
+this command fails atomically. It accepts the following options:
+
+ @itemlist[
+ @item{@DFlag{dont-setup} -- Same as for @exec{install}.}
+ @item{@DFlag{installation} -- Same as for @exec{install}.}
+ @item{@Flag{i} -- Same as for @exec{install}.}
+ @item{@DFlag{deps} @exec{dep-behavior} -- Same as for @exec{install}.}
+ @item{@DFlag{update-deps} -- Checks the named packages, and their dependencies (transitively) for updates.}
+ ]
+}
+
+@item{@exec{remove pkg ...} -- Attempts to remove the packages. If a package is the dependency of another package that is not listed, this command fails atomically. It accepts the following options:
+
+ @itemlist[
+ @item{@DFlag{dont-setup} -- Same as for @exec{install}.}
+ @item{@DFlag{installation} -- Same as for @exec{install}.}
+ @item{@Flag{i} -- Same as for @exec{install}.}
+ @item{@DFlag{force} -- Ignore dependencies when removing packages.}
+ @item{@DFlag{auto} -- Remove packages that were installed by the @exec{search-auto} and @exec{search-ask} dependency behavior that are no longer required.}
+ ]
+}
+
+@item{@exec{show} -- Print information about currently installed packages. It accepts the following options:
+
+ @itemlist[
+ @item{@DFlag{installation} -- Same as for @exec{install}.}
+ @item{@Flag{i} -- Same as for @exec{install}.}
+ ]
+}
+
+@item{@exec{config key val ...} -- View and modify Planet 2 configuration options. It accepts the following options:
+
+ @itemlist[
+ @item{@DFlag{installation} -- Same as for @exec{install}.}
+ @item{@Flag{i} -- Same as for @exec{install}.}
+ @item{@DFlag{set} -- Sets an option, rather than printing it.}
+ ]
+
+ The valid keys are:
+ @itemlist[
+  @item{@exec{indexes} -- A list of URLs for @tech{package name services}.}           
+ ]
+}
+
+@item{@exec{create package-directory} -- Bundles a package. It accepts the following options:
+
+ @itemlist[
+ @item{@DFlag{format str} -- Specifies the archive format. The options are: @exec{tgz}, @exec{zip}, and @exec{plt} (default.)}
+ @item{@DFlag{manifest} -- Creates a manifest file for a directory, rather than an archive.}
+ ]
+}
+]
 
 @subsection{Programatically}
+@(require (for-label planet2))
 
 @defmodule[planet2]
 
-XXX
+The @racketmodname[planet2] module provides a programatic interface to
+the command sub-sub-commands. Each long form option is keyword
+argument. @DFlag{deps} accepts its argument as a symbol and
+@DFlag{format} accepts its argument as a string. All other options
+accept booleans, where @racket[#t] is equivalent to the presence of
+the option.
+
+@deftogether[
+ (@defthing[install procedure?]             
+  @defthing[update procedure?]             
+  @defthing[remove procedure?]             
+  @defthing[show procedure?]             
+  @defthing[config procedure?]             
+  @defthing[create procedure?])             
+]{
+ Duplicates the command line interface programmatically.  
+}
 
 @section{Developing Planet 2 Packages}
 
-XXX
+This section walks through the setup for a basic Planet 2 package.
+
+First, make a directory for your package and select its name:
+
+@commandline{mkdir <package-name>}
+
+Next, link your development directory to your local package
+repository:
+
+@commandline{raco pkg install --link <package-name>}
+
+Next, enter your directory and create a basic @tech{package metadata}
+file:
+
+@commandline{cd <package-name>}
+@commandline{echo "((dependency))" > METADATA.rktd}
+
+Next, inside this directory, create directories for the collections
+and modules that your package will provide. For example,
+the developer of @filepath{tic-tac-toe} might do:
+
+@commandline{mkdir -p games/tic-tac-toe}
+@commandline{touch games/tic-tac-toe/info.rkt}
+@commandline{touch games/tic-tac-toe/main.rkt}
+@commandline{mkdir -p data}
+@commandline{touch data/matrix.rkt}
+
+After your package is ready to deploy choose one of the following
+options:
+
+@subsection{Github Deployment}
+
+First, create a free account on
+Github (@link["https://github.com/signup/free"]{signup here}). Then
+create a repository for your
+package (@link["https://github.com/new"]{here} (@link["https://help.github.com/articles/create-a-repo"]{documentation}).)
+Then initialize the Git repository locally and do your first push:
+
+@commandline{git init}
+@commandline{git add *}
+@commandline{git commit -m "First commit"}
+@commandline{git remote add origin https://github.com/<username>/<package-name>.git}
+@commandline{git push origin master}
+
+Now, publish your package source as:
+
+@exec{github://github.com/<username>/<package-name>/<branch>}
+
+(Typically, <branch> will be @litchar{master}, but you may wish to use
+different branches for releases and development.)
+
+Now, whenever you
+
+@commandline{git push}
+
+Your changes will automatically be discovered by those who used your
+package source.
+
+@subsection{Manual Deployment}
+
+Alternatively, you can deploy your package by publishing it on a URL
+you control. If you do this, it is preferable to create an archive
+first:
+
+@commandline{raco pkg create <package-name>}
+
+And then upload the archive and its checksum to your site:
+
+@commandline{scp <package-name>.plt <package-name>.plt.CHECKSUM your-host:public_html/}
+
+Now, publish your package source as:
+
+@exec{http://your-host/~<username>/<package-name>.plt}
+
+Now, whenever you want to release a new version, recreate and reupload
+the package archive (and checksum). Your changes will automatically be
+discovered by those who used your package source.
+
+@subsection{Helping Others Discover Your Package}
+
+By using either of the above deployment techniques, anyone will be
+able to use your package. However, they will not be able to refer to
+it by name until it is listed on a @tech{package name service}.
+
+If you'd like to use the official @tech{package name service}, browse
+to
+@link["https://plt-etc.byu.edu:9004/manage/upload"]{https://plt-etc.byu.edu:9004/manage/upload}
+and upload a new package. You will need to create an account and log
+in first.
+
+You only need to go to this site @emph{once} to list your package. The
+server will periodically check the package source you designate for
+updates.
+
+If you use this server, and use Github for deployment, then you will
+never need to open a Web browser to update your package for end
+users. You just need to push to your Github repository, then within 24
+hours, the official @tech{package name service} will notice, and
+@exec{raco pkg update} will work on your user's machines.
+
+@subsection{Naming and Designing Packages}
+
+Although of course not required, we suggest the following system for
+naming and designing packages:
+
+@itemlist[
+
+@item{Packages should not include the name of the author or
+organization that produces them, but be named based on the content of
+the package. For example, @filepath{data-priority-queue} is preferred
+to @filepath{johns-amazing-queues}.}
+
+@item{Packages that provide an interface to a foreign library or
+service should be named the same as the service. For example,
+@filepath{cairo} is preferred to @filepath{Racket-cairo} or a similar
+name.}
+
+@item{Packages should not generally contain version-like elements in
+their names, initially. Instead, version-like elements should be added
+when backwards incompatible changes are necessary. For example,
+@filepath{data-priority-queue} is preferred to
+@filepath{data-priority-queue1}. Exceptions include packages that
+present interfaces to external, versioned things, such as
+@filepath{sqlite3} or @filepath{libgtk2}.}
+
+@item{Packages should not include large sets of utilities libraries
+that are likely to cause conflicts. For example, packages should not
+contain many extensions to the @filepath{racket} collection, like
+@filepath{racket/more-lists.rkt} and
+@filepath{racket/more-bools.rkt}. Instead, such as extensions should
+be separated into their own packages.}
+
+@item{Packages should generally provide one collection with a name
+similar to the name of the package. For example, @filepath{libgtk1}
+should provide a collection named @filepath{libgtk}. Exceptions
+include extensions to existing collection, such as new data-structures
+for the @filepath{data} collection, DrRacket tools, new games for PLT
+Games, etc. But see the next bullet as well.}
+
+@item{Packages should make use of general collections, such as
+@filepath{tests} and @filepath{typed}, rather than including their own
+sub-collections for tests, typed interfaces, documentation, etc.}
+
+]
+
+@section{Planet 1 Compatibility}
+
+PLT maintains a Planet 1 compatibility @tech{package name service} at
+@link["https://plt-etc.byu.edu:9003/"]{https://plt-etc.byu.edu:9003/}. This
+PNS is included by default in the Planet search path.
+
+Planet 2 copies of Planet 1 packages are automatically created by this
+server according to the following system: for all packages that are in
+the @litchar{4.x} Planet 1 repository, the latest minor version of
+@tt{<user>/<package>.plt/<major-version>} will be available as
+@filepath{planet-<user>-<package><major-version>}. For example,
+@tt{jaymccarthy/opencl.plt/1} minor version @tt{2}, will be available as
+@filepath{planet-jaymccarthy-opencl1}.
+
+The contents of these copies is a single collection with the name
+@filepath{<user>/<package><major-version>} with all the files from the
+original Planet 1 package in it.
+
+Each file has been transliterated to use direct Racket-style requires
+rather than Planet 1-style requires. For example, if any file contains
+@racket[(planet jaymccarthy/opencl/module)], then it is transliterated
+to @racket[jaymccarthy/opencl1/module]. @emph{This transliteration is
+purely syntactic and is trivial to confuse, but works for most
+packages, in practice.}
+
+Any transliterations that occurred are automatically added as
+dependencies for the Planet 2 compatibility package.
+
+We do not intend to improve this compatibility system much more over
+time, because it is simply a stop-gap as developers port their
+packages to Planet 2.
 
 @section{FAQ}
 
 This section answers anticipated frequently asked questions about
 Planet 2.
+
+@subsection{Are package installations versioned with respect to the
+Racket version?}
+
+No. When you install a Planet 2 package, it is installed for all
+versions of Racket until you remove it. (In contrast, Planet 1
+requires reinstallation of all packages every version change.)
 
 @subsection{Where and how are packages installed?}
 
@@ -250,7 +543,7 @@ in "solar-system" or "planet".}
 
   @item{"planet" -- Must not conflict any package in "solar-system"
 or "planet". Must have documentation and tests. The author must be
-responsive about fixing regressions against changes in Racket.}
+responsive about fixing regressions against changes in Racket, etc.}
 
  ]
 
@@ -278,6 +571,10 @@ a "stamp of approval" from PLT. In the future, packages in this
 category will have more benefits, such as automatic regression testing
 on DrDr, testing during releases, provided binaries, and advertisement
 during installation.
+
+The Planet 1 compatibility packages will also be included in
+the "solar-system" category, automatically. 
+
 }
 
 @item{In order to mitigate the costs of external linking vis a vis the
@@ -307,8 +604,13 @@ require a lot of cross-Racket integration.
 
 @item{The official PNS is bare bones. It could conceivably do a lot
 more: keep track of more statistics, enable "social" interactions
-about packages, link to documentation, problem reports, etc. Some of
-this is easy and obvious, but the community's needs are unclear.}
+about packages, link to documentation, problem reports, licenses,
+etc. Some of this is easy and obvious, but the community's needs are
+unclear.}
+
+@item{It would be nice to encrypt information from the official
+@tech{package name service} with a public key shipped with Racket, and
+allow other services to implement a similar security scheme.}
 
 @item{Packages in the "planet" category should be tested on
 DrDr. This would require a way to communicate information about how
@@ -326,8 +628,8 @@ different versions of Racket installed.
 One solution is to have a separate place where such "binary" packages
 are available. For example, PLT could run a PNS for every Racket
 version, i.e., @filepath{https://binaries.racket-lang.org/5.3.1.4},
-that would contain the binaries for all the packages on the main
-server. Thus, when you install package @filepath{tic-tac-toe} you
+that would contain the binaries for all the packages in the "planet"
+category. Thus, when you install package @filepath{tic-tac-toe} you
 could also install the binary version from the appropriate PNS.
 
 There are obvious problems with this... it could be expensive for PLT

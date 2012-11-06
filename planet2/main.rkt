@@ -20,8 +20,8 @@
     "Options are: fail, force, search-ask, search-auto."
     "  'fail' cancels the installation if dependencies are unmet (default for most packages)."
     "  'force' installs the package despite missing dependencies."
-    "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
-    "  'search-auto' is like 'search-auto' but does not ask for permission to install.")]
+    "  'search-ask' looks for the dependencies on your package naming services (default if package is an indexed name) and asks if you would like it installed."
+    "  'search-auto' is like 'search-ask' but does not ask for permission to install.")]
   [#:bool force () "Ignores conflicts"]
   [#:bool ignore-checksums () "Ignores checksums"]
   [#:bool link () "When used with a directory package, leave the directory in place, but add a link to it in the package directory. This is a global setting for all installs for this command, which means it affects dependencies... so make sure the dependencies exist first."]
@@ -43,8 +43,8 @@
     "Options are: fail, force, search-ask, search-auto."
     "  'fail' cancels the installation if dependencies are unmet (default for most packages)."
     "  'force' installs the package despite missing dependencies."
-    "  'search-ask' looks for the dependencies on your package indexing services (default for if package is an indexed name) and asks if you would like it installed."
-    "  'search-auto' is like 'search-auto' but does not ask for permission to install.")]
+    "  'search-ask' looks for the dependencies on your package naming services (default if package is an indexed name) and asks if you would like it installed."
+    "  'search-auto' is like 'search-ask' but does not ask for permission to install.")]
   [#:bool update-deps () "Check named packages' dependencies for updates"]
   #:args pkgs
   (parameterize ([current-install-system-wide? installation])
