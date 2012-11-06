@@ -401,6 +401,14 @@
              "Illegal character in name; only alphanumerics, plus '-' and '_' allowed: ~e"
              new-pkg))
 
+    (when (and (not (equal? pkg new-pkg))
+               (or (regexp-match #rx"^[Pp][Ll][Tt]" new-pkg)
+                   (regexp-match #rx"^[Pp][Ll][Aa][Nn][Ee][Tt]" new-pkg)
+                   (regexp-match #rx"^[Rr][Aa][Cc][Kk][Ee][Tt]" new-pkg)))
+      (error 'planet2
+             "Packages that start with plt, planet, and racket are not allowed without special permission. Please create your package with a different name, then email curation to request a rename: ~e"
+             new-pkg))
+
     (when (and (package-exists? new-pkg)
                (not (equal? (package-ref (package-info new-pkg) 'author)
                             (current-user pkg-req #t))))
