@@ -379,6 +379,10 @@ Games, etc. But see the next bullet as well.}
 @filepath{tests} and @filepath{typed}, rather than including their own
 sub-collections for tests, typed interfaces, documentation, etc.}
 
+@item{Packages are not allowed to start with @pkgname{plt},
+@pkgname{racket}, or @pkgname{planet} without special approval from
+PLT curation.}
+
 ]
 
 @section{Planet 1 Compatibility}

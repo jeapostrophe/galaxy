@@ -26,9 +26,10 @@
    Link to official PNS better in the document
 ** DONE Add forms for pkgname and reponame
    CLOSED: [2012-11-05 Mon 21:46]
+** DONE server - disallow plt and racket prefixes
+   CLOSED: [2012-11-05 Mon 21:50]
 ** TODO core - ignore README, README.md, and LICENSE
    Can I ignore all non-rkt/scrbl files?
-** TODO server - disallow plt and racket prefixes
 ** TODO Put it in the core
    Add exemptions to DrDr props
 ** TODO Create initial packages (my own)
