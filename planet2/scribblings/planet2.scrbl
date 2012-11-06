@@ -1,5 +1,8 @@
 #lang scribble/manual
 
+@(define pkgname onscreen)
+@(define reponame litchar)
+
 @title{Planet 2: Package Distribution (Beta)}
 @author[@author+email["Jay McCarthy" "jay@racket-lang.org"]]
 
@@ -72,7 +75,7 @@ checksum is the hash identifying the branch. For example,
 
 @item{a bare package name -- The local list of @tech{package name
 services} is consulted to determine the source and checksum for the
-package. For example, @filepath{tic-tac-toe}.}
+package. For example, @pkgname{tic-tac-toe}.}
 
 ]
 
@@ -97,11 +100,11 @@ is recorded, as well as if it was an @tech{automatic installation}. An
 was a dependency of a non-@tech{automatic installation} package.
 
 Two packages are in @deftech{conflict} if they contain the same
-module. For example, if the package @filepath{tic-tac-toe} contains
+module. For example, if the package @pkgname{tic-tac-toe} contains
 the module file @filepath{data/matrix.rkt} and the package
-@filepath{factory-optimize} contains the module file
-@filepath{data/matrix.rkt}, then @filepath{tic-tac-toe} and
-@filepath{factory-optimize} are in conflict. A package may also be in
+@pkgname{factory-optimize} contains the module file
+@filepath{data/matrix.rkt}, then @pkgname{tic-tac-toe} and
+@pkgname{factory-optimize} are in conflict. A package may also be in
 conflict with Racket itself, if it contains a module file that is part
 of the core Racket distribution. For example, any package that
 contains @filepath{racket/list.rkt} is in conflict with Racket.
@@ -252,7 +255,7 @@ file:
 
 Next, inside this directory, create directories for the collections
 and modules that your package will provide. For example,
-the developer of @filepath{tic-tac-toe} might do:
+the developer of @pkgname{tic-tac-toe} might do:
 
 @commandline{mkdir -p games/tic-tac-toe}
 @commandline{touch games/tic-tac-toe/info.rkt}
@@ -342,21 +345,21 @@ naming and designing packages:
 
 @item{Packages should not include the name of the author or
 organization that produces them, but be named based on the content of
-the package. For example, @filepath{data-priority-queue} is preferred
-to @filepath{johns-amazing-queues}.}
+the package. For example, @pkgname{data-priority-queue} is preferred
+to @pkgname{johns-amazing-queues}.}
 
 @item{Packages that provide an interface to a foreign library or
 service should be named the same as the service. For example,
-@filepath{cairo} is preferred to @filepath{Racket-cairo} or a similar
+@pkgname{cairo} is preferred to @pkgname{Racket-cairo} or a similar
 name.}
 
 @item{Packages should not generally contain version-like elements in
 their names, initially. Instead, version-like elements should be added
 when backwards incompatible changes are necessary. For example,
-@filepath{data-priority-queue} is preferred to
-@filepath{data-priority-queue1}. Exceptions include packages that
+@pkgname{data-priority-queue} is preferred to
+@pkgname{data-priority-queue1}. Exceptions include packages that
 present interfaces to external, versioned things, such as
-@filepath{sqlite3} or @filepath{libgtk2}.}
+@pkgname{sqlite3} or @pkgname{libgtk2}.}
 
 @item{Packages should not include large sets of utilities libraries
 that are likely to cause conflicts. For example, packages should not
@@ -366,7 +369,7 @@ contain many extensions to the @filepath{racket} collection, like
 be separated into their own packages.}
 
 @item{Packages should generally provide one collection with a name
-similar to the name of the package. For example, @filepath{libgtk1}
+similar to the name of the package. For example, @pkgname{libgtk1}
 should provide a collection named @filepath{libgtk}. Exceptions
 include extensions to existing collection, such as new data-structures
 for the @filepath{data} collection, DrRacket tools, new games for PLT
@@ -388,9 +391,9 @@ Planet 2 copies of Planet 1 packages are automatically created by this
 server according to the following system: for all packages that are in
 the @litchar{4.x} Planet 1 repository, the latest minor version of
 @tt{<user>/<package>.plt/<major-version>} will be available as
-@filepath{planet-<user>-<package><major-version>}. For example,
+@pkgname{planet-<user>-<package><major-version>}. For example,
 @tt{jaymccarthy/opencl.plt/1} minor version @tt{2}, will be available as
-@filepath{planet-jaymccarthy-opencl1}.
+@pkgname{planet-jaymccarthy-opencl1}.
 
 The contents of these copies is a single collection with the name
 @filepath{<user>/<package><major-version>} with all the files from the
@@ -463,7 +466,7 @@ Planet 2 to deal with this situation. (Other than, of course, not
 installing the "update".) Therefore, package authors should not make
 backwards incompatible changes to packages. Instead, they should
 release a new package with a new name. For example, package
-@filepath{libgtk} might become @filepath{libgtk2}. These packages
+@pkgname{libgtk} might become @pkgname{libgtk2}. These packages
 should be designed to not conflict with each other, as well.
 
 @subsection{Why is Planet 2 so different than Planet 1?}
@@ -486,7 +489,7 @@ interest:
 ]
 
 and would rely on the external system having the
-@filepath{tic-tac-toe} package installed.
+@pkgname{tic-tac-toe} package installed.
 
 This change is good because it makes the origin of modules more
 flexible---so that code can migrate in and out of the core, packages
@@ -531,41 +534,42 @@ out of beta when these are completed.
 @item{It has not been tested on Windows or Mac OS X.}
 
 @item{The official PNS will divide packages into three
-categories: "planet", "solar-system", and "galaxy". The definitions
+categories: @reponame{planet}, @reponame{solar-system}, and @reponame{galaxy}. The definitions
 for these categories are:
 
  @itemlist[
 
-  @item{"galaxy" -- No restrictions.}
+  @item{@reponame{galaxy} -- No restrictions.}
 
-  @item{"solar-system" -- Must not conflict any package
-in "solar-system" or "planet".}
+  @item{@reponame{solar-system} -- Must not conflict any package
+in @reponame{solar-system} or @reponame{planet}.}
 
-  @item{"planet" -- Must not conflict any package in "solar-system"
-or "planet". Must have documentation and tests. The author must be
+  @item{@reponame{planet} -- Must not conflict any package in @reponame{solar-system}
+or @reponame{planet}. Must have documentation and tests. The author must be
 responsive about fixing regressions against changes in Racket, etc.}
 
  ]
 
 This categories will be curated by PLT.
 
-Our goal is for all packages to be in the "solar-system", with
-the "galaxy" as a temporary place while the curators work with the
+Our goal is for all packages to be in the @reponame{solar-system}, with
+the @reponame{galaxy} as a temporary place while the curators work with the
 authors of conflicting packages to determine how modules should be
 renamed for unity.
 
 However, before curation is complete, each package will be
-automatically placed in "galaxy" or "solar-system" depending on its
-conflicts, with preference being given to older packages. (For
-example, if a new package B conflicts with an old package A, then A
-will be in "solar-system", but B will be in "galaxy".) During
-curation, however, it is not necessarily the case that older packages
-have preference. (For example, @filepath{tic-tac-toe} should probably
-not provide @filepath{data/matrix.rkt}, but that could be spun off
-into another package used by both @filepath{tic-tac-toe} and
-@filepath{factory-optimize}.)
+automatically placed in @reponame{galaxy} or @reponame{solar-system}
+depending on its conflicts, with preference being given to older
+packages. (For example, if a new package B conflicts with an old
+package A, then A will be in @reponame{solar-system}, but B will be in
+@reponame{galaxy}.) During curation, however, it is not necessarily
+the case that older packages have preference. (For example,
+@pkgname{tic-tac-toe} should probably not provide
+@filepath{data/matrix.rkt}, but that could be spun off into another
+package used by both @pkgname{tic-tac-toe} and
+@pkgname{factory-optimize}.)
 
-In contrast, the "planet" category will be a special category that
+In contrast, the @reponame{planet} category will be a special category that
 authors may apply for. Admission requires a code audit and implies
 a "stamp of approval" from PLT. In the future, packages in this
 category will have more benefits, such as automatic regression testing
@@ -573,7 +577,7 @@ on DrDr, testing during releases, provided binaries, and advertisement
 during installation.
 
 The Planet 1 compatibility packages will also be included in
-the "solar-system" category, automatically. 
+the @reponame{solar-system} category, automatically. 
 
 }
 
@@ -583,11 +587,12 @@ resolver that searches for providers of modules on the configured
 @tech{package name services}. For example, if a module requires
 @filepath{data/matrix.rkt}, and it is not available, then the PNS will
 be consulted to discover what packages provide it. @emph{Only packages
-in "solar-system" or "planet" will be returned.} Users can configure
-their systems to then automatically install the package provide is has
-the appropriate category (i.e., some users may wish to automatically
-install "planet" packages but not "solar-system" packages, while
-others may not want to install any.)
+in @reponame{solar-system} or @reponame{planet} will be returned.}
+Users can configure their systems to then automatically install the
+package provide is has the appropriate category (i.e., some users may
+wish to automatically install @reponame{planet} packages but not
+@reponame{solar-system} packages, while others may not want to install
+any.)
 
 This feature will be generalized across all @tech{package name
 services}, so users could maintain their own category definitions with
@@ -612,7 +617,7 @@ unclear.}
 @tech{package name service} with a public key shipped with Racket, and
 allow other services to implement a similar security scheme.}
 
-@item{Packages in the "planet" category should be tested on
+@item{Packages in the @reponame{planet} category should be tested on
 DrDr. This would require a way to communicate information about how
 they should be run to DrDr. This is currently done via the
 @filepath{meta/props} script for things in the core. We should
@@ -628,9 +633,10 @@ different versions of Racket installed.
 One solution is to have a separate place where such "binary" packages
 are available. For example, PLT could run a PNS for every Racket
 version, i.e., @filepath{https://binaries.racket-lang.org/5.3.1.4},
-that would contain the binaries for all the packages in the "planet"
-category. Thus, when you install package @filepath{tic-tac-toe} you
-could also install the binary version from the appropriate PNS.
+that would contain the binaries for all the packages in the
+@reponame{planet} category. Thus, when you install package
+@pkgname{tic-tac-toe} you could also install the binary version from
+the appropriate PNS.
 
 There are obvious problems with this... it could be expensive for PLT
 in terms of space and time... Racket compilation is not necessarily
