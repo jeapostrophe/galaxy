@@ -100,14 +100,16 @@ is recorded, as well as if it was an @tech{automatic installation}. An
 was a dependency of a non-@tech{automatic installation} package.
 
 Two packages are in @deftech{conflict} if they contain the same
-module. For example, if the package @pkgname{tic-tac-toe} contains
-the module file @filepath{data/matrix.rkt} and the package
+module. For example, if the package @pkgname{tic-tac-toe} contains the
+module file @filepath{data/matrix.rkt} and the package
 @pkgname{factory-optimize} contains the module file
 @filepath{data/matrix.rkt}, then @pkgname{tic-tac-toe} and
 @pkgname{factory-optimize} are in conflict. A package may also be in
 conflict with Racket itself, if it contains a module file that is part
 of the core Racket distribution. For example, any package that
-contains @filepath{racket/list.rkt} is in conflict with Racket.
+contains @filepath{racket/list.rkt} is in conflict with Racket. For
+the purposes of conflicts, a module is a file that ends in
+@litchar{.rkt} or @litchar{.ss}.
 
 Package A is a @deftech{package update} of Package B if (1) B is
 installed, (2) A and B have the same name, and (3) A's checksum is

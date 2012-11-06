@@ -499,8 +499,8 @@
       [(and
         (not force?)
         (for/or ([f (in-list (directory-list* pkg-dir))]
-                 #:unless (equal? f (build-path "MANIFEST"))
-                 #:unless (equal? f (build-path "METADATA.rktd")))
+                 #:when (member (filename-extension f)
+                                (list #"rkt" #"ss")))
           (or
            ;; Compare with Racket
            (and (file-exists? (build-path (absolute-collects-dir) f))

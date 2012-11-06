@@ -17,6 +17,12 @@
  (shelly-begin
   (initialize-indexes)
 
+  $ "raco pkg create test-pkgs/planet2-test1"
+  $ "raco pkg create test-pkgs/planet2-test1-not-conflict"
+  (shelly-install "only modules are considered for conflicts"
+                  "test-pkgs/planet2-test1.plt"
+                  $ "raco pkg install test-pkgs/planet2-test1-not-conflict.plt")
+
   (shelly-case
    "conflicts"
    (shelly-install "double install fails" "test-pkgs/planet2-test1.zip"

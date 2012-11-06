@@ -28,7 +28,8 @@
    CLOSED: [2012-11-05 Mon 21:46]
 ** DONE server - disallow plt and racket prefixes
    CLOSED: [2012-11-05 Mon 21:50]
-** TODO core - ignore README, README.md, and LICENSE
+** DONE core - ignore README, README.md, and LICENSE
+   CLOSED: [2012-11-05 Mon 22:07]
    Can I ignore all non-rkt/scrbl files?
 ** TODO Put it in the core
    Add exemptions to DrDr props
